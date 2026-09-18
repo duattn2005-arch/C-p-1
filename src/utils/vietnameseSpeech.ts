@@ -112,7 +112,7 @@ export function buildQuestionAudioText(question: {
   prompt: string;
   formula?: string;
   subPrompt?: string;
-  options: Array<{ id: string; text: string }>;
+  options: Array<{ id: string; text: string; face?: { only?: boolean } }>;
 }): string {
   let basePrompt = (question.prompt || '').trim();
   let formulaText = question.formula ? formatMathForVietnameseSpeech(question.formula) : '';
@@ -136,7 +136,8 @@ export function buildQuestionAudioText(question: {
   // Từng lựa chọn đáp án được tách nhịp rõ ràng:
   const optionSegments = (question.options || []).map((opt, index) => {
     const letter = (opt.id || '').toLowerCase();
-    const cleanText = formatMathForVietnameseSpeech(opt.text || '');
+    // a picture-only option has no words to read: name it by its letter
+    const cleanText = opt.face?.only ? `hình ${letter}` : formatMathForVietnameseSpeech(opt.text || '');
     if (index === 0) {
       return `đáp án ${letter}: ${cleanText}`;
     }

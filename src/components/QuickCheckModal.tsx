@@ -3,6 +3,7 @@ import { Skill, CurriculumQuestion } from '../types/curriculum';
 import { getQuestionsBySkill, toLegacyQuestion } from '../data/curriculumData';
 import { evaluatePreTestScore } from '../services/mastery';
 import { KiddoMascot } from './KiddoMascot';
+import { QuestionVisualView, OptionBody } from './QuestionVisual';
 import confetti from 'canvas-confetti';
 import { Zap, CheckCircle2, XCircle, ArrowRight, Sparkles, BookOpen, Trophy } from 'lucide-react';
 
@@ -131,10 +132,18 @@ export const QuickCheckModal: React.FC<QuickCheckModalProps> = ({
               <h4 className="font-extrabold text-base sm:text-lg text-[#24324A]">
                 {currentQ.prompt}
               </h4>
+              {currentQ.visual && (
+                <div className="my-3">
+                  <QuestionVisualView visual={currentQ.visual} />
+                </div>
+              )}
               {currentQ.formula && (
                 <div className="font-black text-2xl sm:text-3xl text-[#2563EB] my-3 tracking-wide text-center">
                   {currentQ.formula}
                 </div>
+              )}
+              {currentQ.subPrompt && (
+                <p className="text-sm sm:text-base font-bold text-slate-600 leading-relaxed whitespace-pre-line mt-2">{currentQ.subPrompt}</p>
               )}
             </div>
 
@@ -159,7 +168,7 @@ export const QuickCheckModal: React.FC<QuickCheckModalProps> = ({
                     >
                       {opt.id}
                     </span>
-                    <span className="text-base font-extrabold">{opt.text}</span>
+                    <OptionBody text={opt.text} face={opt.face} textClass="text-base font-extrabold" />
                   </button>
                 );
               })}

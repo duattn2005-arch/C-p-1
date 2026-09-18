@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Question, StudentProfile } from '../types';
-import { fastTestQuestions } from '../data/mockData';
+import { Lesson, Question, StudentProfile } from '../types';
+import { QuestionVisualView, OptionBody } from './QuestionVisual';
 import { KiddoMascot } from './KiddoMascot';
 import confetti from 'canvas-confetti';
 import { 
@@ -24,6 +24,7 @@ import {
 
 interface FastTestViewProps {
   profile: StudentProfile;
+  lesson: Lesson; // the skill just studied: the test draws its questions from it
   onClose: () => void;
   onPassFastTest: (earnedXp: number, newMastery: number) => void;
   onFailFastTest: () => void;
@@ -31,6 +32,7 @@ interface FastTestViewProps {
 
 export const FastTestView: React.FC<FastTestViewProps> = ({
   profile,
+  lesson,
   onClose,
   onPassFastTest,
   onFailFastTest,
@@ -46,8 +48,11 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
     };
   }, []);
 
-  const total = fastTestQuestions.length;
-  const currentQ: Question = fastTestQuestions[currentIdx];
+  // The three hardest questions of that skill (a skill's questions are ordered from easy to hard)
+  const questions: Question[] = lesson.questions.slice(-3);
+  const total = questions.length;
+  const passMark = Math.max(1, Math.ceil((total * 2) / 3));
+  const currentQ: Question = questions[currentIdx];
 
   const handleSpeakQuestion = () => {
     if (isSpeaking) {
@@ -75,11 +80,11 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
 
   // Calculate score
   const correctCount = Object.entries(answers).reduce((acc, [idx, chosen]) => {
-    const q = fastTestQuestions[Number(idx)];
+    const q = questions[Number(idx)];
     return chosen === q.correctOptionId ? acc + 1 : acc;
   }, 0);
 
-  const isPassed = correctCount >= 2;
+  const isPassed = correctCount >= passMark;
 
   const handleSelect = (optionId: string) => {
     stopSpeaking();
@@ -95,11 +100,11 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
       // Finished all 3
       setIsFinished(true);
       const finalCorrect = Object.entries(newAnswers).reduce((acc, [idx, chosen]) => {
-        const q = fastTestQuestions[Number(idx)];
+        const q = questions[Number(idx)];
         return chosen === q.correctOptionId ? acc + 1 : acc;
       }, 0);
 
-      if (finalCorrect >= 2) {
+      if (finalCorrect >= passMark) {
         try {
           confetti({
             particleCount: 120,
@@ -144,7 +149,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
 
         {/* Progress dots */}
         <div className="flex items-center gap-2">
-          {fastTestQuestions.map((_, i) => (
+          {questions.map((_, i) => (
             <div
               key={i}
               className={`w-3 h-3 rounded-full transition-all ${
@@ -176,12 +181,24 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
 
             {/* Question Formula Card */}
             <div className="w-full bg-[#F7FBFF] rounded-2xl p-6 sm:p-8 border border-blue-100/70 text-center mb-8 flex flex-col items-center">
-              <span className="text-xs font-bold text-slate-400 block mb-2">
+              <span className="text-base sm:text-lg font-black text-[#24324A] block mb-3">
                 {currentQ.prompt}
               </span>
-              <h3 className="text-5xl sm:text-6xl font-black text-[#24324A] tracking-tight">
-                {currentQ.formula}
-              </h3>
+              {currentQ.visual && (
+                <div className="w-full mb-3">
+                  <QuestionVisualView visual={currentQ.visual} />
+                </div>
+              )}
+              {currentQ.formula && (
+                <h3 className="text-4xl sm:text-5xl font-black text-[#24324A] tracking-tight">
+                  {currentQ.formula}
+                </h3>
+              )}
+              {currentQ.subPrompt && (
+                <p className="mt-3 w-full text-left text-base font-bold text-slate-600 leading-relaxed whitespace-pre-line">
+                  {currentQ.subPrompt}
+                </p>
+              )}
 
               {/* Sound Audio Button */}
               <button
@@ -225,7 +242,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
                       <span className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-lg text-slate-600">
                         {opt.id}
                       </span>
-                      <span>{opt.text}</span>
+                      <OptionBody text={opt.text} face={opt.face} />
                     </div>
                   </button>
                 );
@@ -283,7 +300,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
                   Con cần luyện thêm một chút nhé. 💪
                 </h3>
                 <p className="text-sm font-bold text-slate-600 mb-6">
-                  Con đã làm đúng {correctCount}/{total} câu. Đừng buồn nhé, Kiddo AI sẽ đồng hành và giúp con thuần thục từng bước của phép trừ có nhớ ngay bây giờ!
+                  Con đã làm đúng {correctCount}/{total} câu. Đừng buồn nhé, Kiddo AI sẽ đồng hành và giúp con thuần thục bài "{lesson.title}" ngay bây giờ!
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-3 w-full">

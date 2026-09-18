@@ -8,6 +8,7 @@ import {
   formatMathForVietnameseSpeech,
   buildQuestionAudioText
 } from '../utils/vietnameseSpeech';
+import { QuestionVisualView, OptionBody } from './QuestionVisual';
 import { storageService } from '../services/storage';
 import { updateSkillMasteryAfterAnswer } from '../services/mastery';
 import { 
@@ -28,6 +29,13 @@ import {
   Headphones,
   Trophy
 } from 'lucide-react';
+
+// First clue, worded for the subject (the old text talked about the units column for every question)
+const FIRST_HINT: Record<string, string> = {
+  math: 'Đọc kĩ đề bài, xem đề hỏi gì và có những số nào, hình nào nhé con!',
+  vietnamese: 'Đọc thật kĩ câu hỏi và từng đáp án, rồi loại bớt những đáp án sai nhé con!',
+  english: 'Nhìn kĩ hình, đọc từng đáp án và đoán nghĩa của từ nhé con!',
+};
 
 interface LessonViewProps {
   lesson: Lesson;
@@ -64,6 +72,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
 
   const currentQuestion = lesson.questions[currentQuestionIndex] || lesson.questions[0];
   const totalQuestions = lesson.questions.length;
+  const firstHint = FIRST_HINT[lesson.subjectId] ?? FIRST_HINT.math;
   const progressPercent = Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
 
   // Reset states when moving to next question
@@ -196,7 +205,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const handleRequestHint = () => {
     if (hintStage === 0) {
       setHintStage(1);
-      setAiSpeechMessage('💡 Gợi ý 1: Hãy bắt đầu phân tích từ hàng đơn vị hoặc từ khóa chính trước nhé!');
+      setAiSpeechMessage('💡 Gợi ý 1: ' + firstHint);
     } else if (hintStage === 1) {
       setHintStage(2);
       setAiSpeechMessage(`💡 Gợi ý 2: ${currentQuestion.hint}`);
@@ -319,6 +328,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
               {currentQuestion.prompt}
             </h2>
 
+            {currentQuestion.visual && <QuestionVisualView visual={currentQuestion.visual} />}
+
             {currentQuestion.formula && (
               <div className="p-6 bg-gradient-to-br from-[#F8FAFC] to-[#F1F5F9] rounded-2xl border border-slate-200/80 text-center select-none shadow-xs">
                 <span className="font-black text-3xl sm:text-4xl text-[#1E3A8A] tracking-wider font-mono">
@@ -328,7 +339,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
             )}
 
             {currentQuestion.subPrompt && (
-              <p className="text-sm font-bold text-slate-500">
+              <p className="text-base sm:text-lg font-bold text-slate-600 leading-relaxed whitespace-pre-line bg-slate-50 border border-slate-200 rounded-2xl p-4">
                 {currentQuestion.subPrompt}
               </p>
             )}
@@ -343,7 +354,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                   </span>
                   <p className="text-sm font-extrabold text-amber-900 leading-relaxed">
                     {hintStage === 1
-                      ? 'Quan sát kỹ hàng đơn vị và thực hiện tính toán từ phải sang trái nhé con!'
+                      ? firstHint
                       : currentQuestion.hint}
                   </p>
                 </div>
@@ -389,9 +400,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                     <span className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 shadow-xs ${badgeStyle}`}>
                       {option.id}
                     </span>
-                    <span className={`text-lg sm:text-xl font-black ${textStyle}`}>
-                      {option.text}
-                    </span>
+                    <OptionBody text={option.text} face={option.face} textClass={`text-lg sm:text-xl font-black ${textStyle}`} />
                   </div>
 
                   <div className="w-7 h-7 rounded-full flex items-center justify-center">

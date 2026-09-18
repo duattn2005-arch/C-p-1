@@ -1,7 +1,6 @@
 import React from 'react';
 import { StudentProfile, DailyMission, SubjectId } from '../types';
 import { KiddoMascot } from './KiddoMascot';
-import { gradeCurriculumCatalog } from '../data/gradeCurriculum';
 import { 
   Sun, 
   Timer, 
@@ -16,7 +15,8 @@ import {
 } from 'lucide-react';
 import { storageService } from '../services/storage';
 import { findWeakestSkill } from '../services/mastery';
-import { skillsDatabase } from '../data/curriculumData';
+import { skillsDatabase, getTopicById, getTopicsByGradeAndSubject } from '../data/curriculumData';
+import type { GradeLevel } from '../types/curriculum';
 
 interface DashboardViewProps {
   profile: StudentProfile;
@@ -27,8 +27,31 @@ interface DashboardViewProps {
   onOpenFastTest: () => void;
   onOpenRewards: () => void;
   onOpenAchievements: () => void;
-  onOpenDivisionTopic?: () => void;
 }
+
+// The five topics a grade studies in one subject; a tap starts the first skill of that topic
+const TopicRoadmap: React.FC<{ subject: SubjectId; grade: GradeLevel; onPick: (skillId: string) => void }> = ({ subject, grade, onPick }) => {
+  const topics = getTopicsByGradeAndSubject(grade, subject);
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[12px] font-black uppercase tracking-wider text-slate-400">Lộ trình Lớp {grade}</span>
+      {topics.map((t) => {
+        const first = skillsDatabase.find((s) => s.topic_id === t.id);
+        return (
+          <button
+            key={t.id}
+            disabled={!first}
+            onClick={() => first && onPick(first.id)}
+            className="flex items-center gap-2 text-left text-[13px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 px-2 py-1 rounded-xl cursor-pointer"
+          >
+            <span>{t.icon}</span>
+            <span className="line-clamp-1">{t.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   profile,
@@ -38,16 +61,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onStartAiPractice,
   onOpenRewards,
   onOpenAchievements,
-  onOpenDivisionTopic,
 }) => {
   const completedMissionsCount = missions.filter((m) => m.completed).length;
   const missionsPercentage = Math.round((completedMissionsCount / missions.length) * 100);
-
-  // Dynamic curriculum based on grade
-  const gradeCatalog = gradeCurriculumCatalog[profile.grade] || gradeCurriculumCatalog[2];
-  const currentMath = gradeCatalog.math[0];
-  const currentVn = gradeCatalog.vietnamese[0];
-  const currentEn = gradeCatalog.english[0];
 
   // Dynamic real data calculation from student mastery storage
   const masteries = storageService.getAllMasteries();
@@ -55,6 +71,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const mathSkills = gradeSkills.filter((s) => s.subject_id === 'math');
   const vnSkills = gradeSkills.filter((s) => s.subject_id === 'vietnamese');
   const enSkills = gradeSkills.filter((s) => s.subject_id === 'english');
+
+  // The next skill to study in each subject: the first one not yet mastered, in the order of the grade's roadmap
+  const planFor = (skills: typeof gradeSkills) => {
+    const next = skills.find((s) => (masteries[s.id]?.mastery_score ?? 0) < 70) ?? skills[0];
+    return { next, topicName: next ? getTopicById(next.topic_id)?.name : undefined };
+  };
+  const mathPlan = planFor(mathSkills);
+  const vnPlan = planFor(vnSkills);
+  const enPlan = planFor(enSkills);
 
   const calcSubjectProgress = (skills: typeof gradeSkills, fallback: number) => {
     if (skills.length === 0) return fallback;
@@ -71,8 +96,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const weakestScore = realWeakestSkill && masteries[realWeakestSkill.id] ? masteries[realWeakestSkill.id].mastery_score : (profile.mathMastery || 48);
 
   const aiRec = {
-    skill: realWeakestSkill ? realWeakestSkill.name.toUpperCase() : 'PHÉP TRỪ CÓ NHỚ TRONG PHẠM VI 100 (52 − 27)',
-    title: realWeakestSkill ? `AI đề xuất: Luyện 5 phút ${realWeakestSkill.name} để bứt phá điểm 10! ✨` : 'AI đề xuất: Luyện 5 phút phép trừ mượn 1 chục để bứt phá điểm 10! ✨',
+    skill: realWeakestSkill ? realWeakestSkill.name.toUpperCase() : (mathPlan.next?.name ?? 'TOÁN').toUpperCase(),
+    title: `AI đề xuất: Luyện 5 phút "${realWeakestSkill?.name ?? mathPlan.next?.name ?? 'Toán'}" để bứt phá điểm 10! ✨`,
     mastery: weakestScore,
   };
 
@@ -122,7 +147,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               <button
-                onClick={() => onStartSubject('math')}
+                onClick={() => onStartSubject('math', mathPlan.next?.id)}
                 className="w-full sm:w-auto px-6 py-3 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-full font-black text-[14px] btn-tactile-blue transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
               >
                 <span>Tiếp tục bài hôm nay</span>
@@ -171,12 +196,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <div>
                   <h3 className="font-black text-[20px] text-[#24324A] line-clamp-2">
-                    {currentMath?.title || 'Toán học vui'}
+                    {mathPlan.next?.name || 'Toán học vui'}
                   </h3>
                   <p className="text-[14px] font-bold text-slate-500 mt-1 line-clamp-2">
-                    {currentMath?.subtitle || 'Chương trình Toán Lớp ' + profile.grade}
+                    {mathPlan.topicName || 'Chương trình Toán Lớp ' + profile.grade}
                   </p>
                 </div>
+
+                <TopicRoadmap subject="math" grade={profile.grade as GradeLevel} onPick={(id) => onStartSubject('math', id)} />
 
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex justify-between text-[14px] font-extrabold">
@@ -193,7 +220,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               <button
-                onClick={() => onStartSubject('math', currentMath?.id)}
+                onClick={() => onStartSubject('math', mathPlan.next?.id)}
                 className="w-full py-3.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-full font-black text-[16px] btn-tactile-blue transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Học tiếp</span>
@@ -215,12 +242,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <div>
                   <h3 className="font-black text-[20px] text-[#24324A] line-clamp-2">
-                    {currentVn?.title || 'Tiếng Việt diệu kỳ'}
+                    {vnPlan.next?.name || 'Tiếng Việt diệu kỳ'}
                   </h3>
                   <p className="text-[14px] font-bold text-slate-500 mt-1 line-clamp-2">
-                    {currentVn?.subtitle || 'Chương trình Tiếng Việt Lớp ' + profile.grade}
+                    {vnPlan.topicName || 'Chương trình Tiếng Việt Lớp ' + profile.grade}
                   </p>
                 </div>
+
+                <TopicRoadmap subject="vietnamese" grade={profile.grade as GradeLevel} onPick={(id) => onStartSubject('vietnamese', id)} />
 
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex justify-between text-[14px] font-extrabold">
@@ -237,7 +266,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               <button
-                onClick={() => onStartSubject('vietnamese', currentVn?.id)}
+                onClick={() => onStartSubject('vietnamese', vnPlan.next?.id)}
                 className="w-full py-3.5 bg-[#FF785A] hover:bg-[#F05B38] text-white rounded-full font-black text-[16px] btn-tactile-coral transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Học tiếp</span>
@@ -259,12 +288,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <div>
                   <h3 className="font-black text-[20px] text-[#24324A] line-clamp-2">
-                    {currentEn?.title || 'Tiếng Anh vui'}
+                    {enPlan.next?.name || 'Tiếng Anh vui'}
                   </h3>
                   <p className="text-[14px] font-bold text-slate-500 mt-1 line-clamp-2">
-                    {currentEn?.subtitle || 'Chương trình Tiếng Anh Lớp ' + profile.grade}
+                    {enPlan.topicName || 'Chương trình Tiếng Anh Lớp ' + profile.grade}
                   </p>
                 </div>
+
+                <TopicRoadmap subject="english" grade={profile.grade as GradeLevel} onPick={(id) => onStartSubject('english', id)} />
 
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex justify-between text-[14px] font-extrabold">
@@ -281,7 +312,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               <button
-                onClick={() => onStartSubject('english', currentEn?.id)}
+                onClick={() => onStartSubject('english', enPlan.next?.id)}
                 className="w-full py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-full font-black text-[16px] btn-tactile-purple transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Học tiếp</span>
@@ -352,34 +383,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* SPECIAL TOPIC: ĐẶT TÍNH PHÉP CHIA 51019 : 19 */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0060AA] to-[#004C87] text-white p-5 sm:p-6 shadow-[0_8px_25px_rgba(0,96,170,0.18)] flex flex-col sm:flex-row items-center justify-between gap-5">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-3xl shrink-0">
-                ➗
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="inline-flex items-center gap-1.5 self-start px-2.5 py-0.5 rounded-full bg-amber-400 text-amber-950 font-black text-[11px]">
-                  <span>⭐ CHUYÊN ĐỀ TOÁN LỚP 4</span>
-                </div>
-                <h3 className="font-black text-lg sm:text-xl text-white">
-                  Đặt tính rồi tính: Phép chia 51019 : 19
-                </h3>
-                <p className="text-xs sm:text-sm font-bold text-blue-100">
-                  Mô phỏng cột đặt tính, giải thích 4 lần chia chi tiết theo đúng SGK Tiểu học
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={onOpenDivisionTopic}
-              className="w-full sm:w-auto px-6 py-3 bg-white hover:bg-blue-50 text-[#0060AA] rounded-full font-black text-sm shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-            >
-              <span>Mở bảng đặt tính</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
           </div>
 
           {/* WEEKLY STUDY TIME CHART (at bottom of left column) */}

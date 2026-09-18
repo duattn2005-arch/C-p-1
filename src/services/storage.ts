@@ -67,10 +67,7 @@ export const storageService = {
 
   // Skill Masteries
   getAllMasteries(): Record<string, StudentSkillMastery> {
-    return getStoredItem<Record<string, StudentSkillMastery>>(STORAGE_KEYS.MASTERIES, {
-      'g2-m-s7': createInitialMastery('student_1', 'g2-m-s7', 48),
-      'g3-m-s7': createInitialMastery('student_1', 'g3-m-s7', 52),
-    });
+    return getStoredItem<Record<string, StudentSkillMastery>>(STORAGE_KEYS.MASTERIES, {});
   },
 
   getSkillMastery(skillId: string): StudentSkillMastery {

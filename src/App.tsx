@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ViewMode, SubjectId, Lesson, StudentProfile, DailyMission } from './types';
-import { GradeLevel } from './types/curriculum';
+import { GradeLevel, Skill } from './types/curriculum';
 import { 
   initialStudentProfile, 
   defaultMissions 
@@ -13,7 +13,6 @@ import {
   getSkillsByTopic,
   topicsDatabase
 } from './data/curriculumData';
-import { getLessonForGradeAndSubject } from './data/gradeCurriculum';
 import { storageService } from './services/storage';
 import { findWeakestSkill } from './services/mastery';
 import { Sidebar } from './components/Sidebar';
@@ -30,6 +29,14 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { MobileNav } from './components/MobileNav';
 import confetti from 'canvas-confetti';
 
+const buildLesson = (skill: Skill): Lesson => toLegacyLesson(skill, getQuestionsBySkill(skill.id));
+
+// First lesson of a subject in a grade: what a grade shows when nothing more specific was picked
+const firstLessonFor = (grade: number, subjectId: SubjectId): Lesson => {
+  const skill = skillsDatabase.find((s) => s.grade === grade && s.subject_id === subjectId) ?? skillsDatabase[0];
+  return buildLesson(skill);
+};
+
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [profile, setProfile] = useState<StudentProfile>(() => storageService.getProfile());
@@ -38,15 +45,7 @@ export default function App() {
   const [toastNotification, setToastNotification] = useState<string | null>(null);
 
   // Active lesson state
-  const [activeLesson, setActiveLesson] = useState<Lesson>(() => {
-    const p = storageService.getProfile();
-    const gSkills = skillsDatabase.filter((s) => s.grade === p.grade && s.subject_id === 'math');
-    if (gSkills.length > 0) {
-      const qList = getQuestionsBySkill(gSkills[0].id);
-      return toLegacyLesson(gSkills[0], qList);
-    }
-    return getLessonForGradeAndSubject(p.grade, 'math');
-  });
+  const [activeLesson, setActiveLesson] = useState<Lesson>(() => firstLessonFor(storageService.getProfile().grade, 'math'));
 
   // Show cheerful floating toast
   const showToast = (message: string) => {
@@ -61,6 +60,7 @@ export default function App() {
     const gl = (Math.max(1, Math.min(5, newGrade)) as GradeLevel);
     const updated = storageService.updateGrade(gl);
     setProfile(updated);
+    setActiveLesson(firstLessonFor(gl, 'math')); // never keep a lesson from the previous grade
     showToast(`Đã chuyển sang chương trình học Lớp ${gl}! 🎓`);
   };
 
@@ -69,6 +69,7 @@ export default function App() {
     const updated = storageService.updateGrade(grade);
     storageService.setOnboardingCompleted(true);
     setProfile(updated);
+    setActiveLesson(firstLessonFor(grade, 'math'));
     setIsOnboardingOpen(false);
     showToast(`Chào mừng con đến với chương trình học Lớp ${grade}! 🚀`);
     try {
@@ -112,32 +113,8 @@ export default function App() {
 
   // Start specific subject lesson with grade and skillId
   const handleStartSubject = (subjectId: SubjectId, skillOrLessonId?: string, grade?: number) => {
-    const targetGrade = grade || profile.grade;
-
-    if (skillOrLessonId) {
-      const skill = getSkillById(skillOrLessonId);
-      if (skill) {
-        const questions = getQuestionsBySkill(skill.id);
-        const lesson = toLegacyLesson(skill, questions);
-        setActiveLesson(lesson);
-        setViewMode('lesson');
-        return;
-      }
-    }
-
-    // Look for first skill of target subject & grade
-    const gradeSkills = skillsDatabase.filter((s) => s.grade === targetGrade && s.subject_id === subjectId);
-    if (gradeSkills.length > 0) {
-      const firstSkill = gradeSkills[0];
-      const questions = getQuestionsBySkill(firstSkill.id);
-      const lesson = toLegacyLesson(firstSkill, questions);
-      setActiveLesson(lesson);
-      setViewMode('lesson');
-      return;
-    }
-
-    const lesson = getLessonForGradeAndSubject(targetGrade, subjectId, skillOrLessonId);
-    setActiveLesson(lesson);
+    const skill = skillOrLessonId ? getSkillById(skillOrLessonId) : undefined;
+    setActiveLesson(skill ? buildLesson(skill) : firstLessonFor(grade || profile.grade, subjectId));
     setViewMode('lesson');
   };
 
@@ -148,9 +125,7 @@ export default function App() {
     const weakest = findWeakestSkill(masteries, gradeSkills);
 
     if (weakest) {
-      const questions = getQuestionsBySkill(weakest.id);
-      const lesson = toLegacyLesson(weakest, questions);
-      setActiveLesson(lesson);
+      setActiveLesson(buildLesson(weakest));
       setViewMode('lesson');
       showToast(`Bắt đầu thử thách 5 phút rèn luyện "${weakest.name}"! 🤖`);
     } else {
@@ -173,7 +148,7 @@ export default function App() {
 
   // Fast Test Fail -> redirect to learn
   const handleFailFastTest = () => {
-    handleStartSubject('math', undefined, profile.grade);
+    handleStartSubject(activeLesson.subjectId, activeLesson.id);
     showToast('Kiddo AI sẽ đồng hành cùng con nắm chắc bài học này nhé! 🚀');
   };
 
@@ -253,10 +228,6 @@ export default function App() {
               onOpenFastTest={() => setViewMode('fast-test')}
               onOpenRewards={() => setViewMode('rewards')}
               onOpenAchievements={() => setViewMode('achievements')}
-              onOpenDivisionTopic={() => {
-                handleGradeChange(4);
-                handleStartSubject('math', 'g4-m-s1', 4);
-              }}
             />
           )}
 
@@ -274,6 +245,7 @@ export default function App() {
           {viewMode === 'fast-test' && (
             <FastTestView
               profile={profile}
+              lesson={activeLesson}
               onClose={() => setViewMode('dashboard')}
               onPassFastTest={handlePassFastTest}
               onFailFastTest={handleFailFastTest}

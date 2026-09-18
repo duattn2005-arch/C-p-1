@@ -49,7 +49,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     {
       grade: 4,
       title: 'Lớp 4',
-      subtitle: 'Đặt tính chia lớn (51019 : 19), phân số & bài toán tổng - tỉ',
+      subtitle: 'Chia số lớn, phân số, hình bình hành & bài toán tổng - tỉ',
       icon: '🏆',
       color: '#A99CFB',
       bgHover: 'hover:border-purple-300 hover:bg-purple-50/50',
