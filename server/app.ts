@@ -125,6 +125,25 @@ function generateLocalElementaryResponse(userText: string, context?: any): strin
     return `Cách thực hiện phép trừ có nhớ **52 − 27**:\n\n1. **Ở hàng đơn vị:** 2 không trừ được 7, ta mượn 1 chục (10 đơn vị) thành 12. Lấy 12 − 7 = **5**, viết 5, nhớ 1.\n2. **Ở hàng chục:** Thêm 1 vào 2 được 3. Lấy 5 − 3 = **2**, viết 2.\n👉 **Kết quả:** 52 − 27 = **25**! ✨`;
   }
 
+  // Simple arithmetic such as "1+1 bằng mấy", "12 - 5", "7 x 8" (division is handled above)
+  const arithmeticMatch = lower.match(/(?<![\d.,])(\d+)\s*([+\-−×x*])\s*(\d+)(?![.,]\d)/);
+  if (arithmeticMatch) {
+    const n1 = parseInt(arithmeticMatch[1], 10);
+    const op = arithmeticMatch[2];
+    const n2 = parseInt(arithmeticMatch[3], 10);
+
+    if (op === '+') {
+      return `**${n1} + ${n2} = ${n1 + n2}** 🎯\n\nCon lấy ${n1} rồi cộng thêm ${n2} nữa, ta được **${n1 + n2}**.\n\n🔍 **Cách thử lại:** ${n1 + n2} − ${n2} = ${n1} (đúng rồi! 👏)`;
+    }
+    if ((op === '-' || op === '−') && n1 >= n2) {
+      return `**${n1} − ${n2} = ${n1 - n2}** 🎯\n\nCon lấy ${n1} bớt đi ${n2}, còn lại **${n1 - n2}**.\n\n🔍 **Cách thử lại:** ${n1 - n2} + ${n2} = ${n1} (đúng rồi! 👏)`;
+    }
+    if (op === '×' || op === 'x' || op === '*') {
+      const check = n2 > 0 ? `\n\n🔍 **Cách thử lại:** ${n1 * n2} : ${n2} = ${n1} (đúng rồi! 👏)` : '';
+      return `**${n1} × ${n2} = ${n1 * n2}** 🎯\n\nNghĩa là ${n2} lần số ${n1}, ta được **${n1 * n2}**.${check}`;
+    }
+  }
+
   // Check for multiplication table
   if (lower.includes('bảng nhân') || lower.includes('bảng cửu chương') || lower.includes('bảng nhân 7')) {
     return `Mẹo nhớ bảng nhân 7 của Kiddo AI nè con! 🌟\nMỗi lần nhân thêm 1 số là cộng thêm đúng 7 đơn vị:\n• 7 × 1 = 7\n• 7 × 2 = 14\n• 7 × 5 = 35 (mốc dễ nhớ)\n• 7 × 6 = 42\n• 7 × 7 = 49\n• 7 × 8 = 56\n• 7 × 9 = 63\n• 7 × 10 = 70.`;
