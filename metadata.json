@@ -1,0 +1,6 @@
+{
+  "name": "KIDDO.AI - Nền Tảng Học Tập Thông Minh",
+  "description": "Web app giáo dục hiện đại dành cho học sinh tiểu học lớp 1–5 với AI cá nhân hóa môn Toán, Tiếng Việt và Tiếng Anh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

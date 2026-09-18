@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #24324A;
+    background-color: #F7FBFF;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom 3D tactile button effects for children */
+.btn-tactile-blue {
+  box-shadow: 0 4px 0 #3D8CE6;
+  transition: all 0.15s ease;
+}
+.btn-tactile-blue:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #3D8CE6;
+}
+
+.btn-tactile-coral {
+  box-shadow: 0 4px 0 #E86350;
+  transition: all 0.15s ease;
+}
+.btn-tactile-coral:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #E86350;
+}
+
+.btn-tactile-purple {
+  box-shadow: 0 4px 0 #7C65F8;
+  transition: all 0.15s ease;
+}
+.btn-tactile-purple:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #7C65F8;
+}
+
+.btn-tactile-mint {
+  box-shadow: 0 4px 0 #38A185;
+  transition: all 0.15s ease;
+}
+.btn-tactile-mint:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #38A185;
+}
