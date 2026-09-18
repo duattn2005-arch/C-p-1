@@ -63,28 +63,44 @@ async function generateWithFallback(ai: GoogleGenAI, params: Omit<GenerateConten
   throw lastError;
 }
 
-const SYSTEM_INSTRUCTION = `Bạn là Thầy giáo Kiddo AI - trợ lý học tập và gia sư thông minh, ân cần, kiên nhẫn dành riêng cho học sinh Tiểu học Việt Nam (Lớp 1 đến Lớp 5).
+// What a child of each grade already knows (Chương trình GDPT 2018), so answers never go beyond it
+const GRADE_GUIDE: Record<number, string> = {
+  1: 'Học sinh Lớp 1 (6-7 tuổi), mới tập đọc. Dùng câu thật ngắn, từ đơn giản và nhiều hình vui (🍎🍊🐟). Toán chỉ trong phạm vi 20: đếm, so sánh, cộng trừ, hình vuông - tròn - tam giác, xăng-ti-mét. Tiếng Việt: chữ cái, dấu thanh, vần, ghép tiếng, đọc từ và câu ngắn. Tiếng Anh: chỉ làm quen từ đơn giản (chữ cái, số 1-10, màu sắc, gia đình, con vật), KHÔNG dạy ngữ pháp. Không dùng từ khó như "số hạng", "biểu thức", "từ loại".',
+  2: 'Học sinh Lớp 2. Toán: số đến 1000, cộng trừ có nhớ trong phạm vi 100, bảng nhân chia 2 và 5, dm - m - kg - lít, xem đồng hồ. Tiếng Việt: từ chỉ sự vật - hoạt động - đặc điểm, câu Ai là gì? Ai làm gì? Ai thế nào?, dấu chấm - chấm hỏi - chấm than - phẩy. Tiếng Anh: từ vựng trường lớp, cơ thể, đồ ăn, đồ chơi và câu rất ngắn.',
+  3: 'Học sinh Lớp 3. Toán: số đến 100 000, bảng nhân chia đến 9, nhân chia số nhiều chữ số cho số có một chữ số, chu vi - diện tích hình chữ nhật và hình vuông, xem đồng hồ. Tiếng Việt: so sánh, nhân hóa, dấu hai chấm, ngoặc kép, đoạn văn tả ngắn. Tiếng Anh: hiện tại đơn và hiện tại tiếp diễn cơ bản, can / can\'t, giờ giấc, quần áo, thời tiết.',
+  4: 'Học sinh Lớp 4. Toán: số đến hàng triệu - tỉ, nhân chia số lớn (chia cho số có hai chữ số), dấu hiệu chia hết cho 2, 3, 5, 9, phân số và bốn phép tính, hình bình hành - hình thoi, bài toán tổng - hiệu, tổng - tỉ. Tiếng Việt: danh từ - động từ - tính từ, cấu tạo tiếng, trạng ngữ, văn miêu tả cây cối và con vật. Tiếng Anh: quốc gia, ngày tháng, môn học, quá khứ đơn (was / were), so sánh hơn.',
+  5: 'Học sinh Lớp 5. Toán: số thập phân và bốn phép tính, tỉ số phần trăm, diện tích hình tam giác - hình thang - hình tròn, thể tích, vận tốc - quãng đường - thời gian. Tiếng Việt: từ đồng nghĩa - trái nghĩa - đồng âm - nhiều nghĩa, nghĩa gốc - nghĩa chuyển, câu ghép và quan hệ từ, văn tả người. Tiếng Anh: trạng từ chỉ tần suất, be going to, lời khuyên, so sánh nhất, đọc hiểu đoạn ngắn.',
+};
 
+function gradeGuide(grade: unknown): string {
+  const g = Math.round(Number(grade));
+  return GRADE_GUIDE[g] ?? '';
+}
+
+// Example the student can type, matched to what their grade calculates
+const GRADE_EXAMPLE: Record<number, string> = { 1: '3 + 4', 2: '52 - 27', 3: '8 x 7', 4: '51019 : 19', 5: '3,5 x 2,4' };
+
+function buildSystemInstruction(grade?: unknown): string {
+  const g = Math.round(Number(grade));
+  const guide = gradeGuide(g);
+  const example = GRADE_EXAMPLE[g] ?? '52 - 27';
+  return `Bạn là Thầy giáo Kiddo AI - trợ lý học tập và gia sư thông minh, ân cần, kiên nhẫn dành riêng cho học sinh Tiểu học Việt Nam (Lớp 1 đến Lớp 5).
+
+${guide ? `TRÌNH ĐỘ CỦA HỌC SINH NÀY - RẤT QUAN TRỌNG:\n${guide}\nChỉ giải thích bằng kiến thức của lớp này hoặc các lớp dưới. Nếu con hỏi kiến thức của lớp trên, hãy nói nhẹ nhàng rằng con sẽ được học sau, rồi chỉ giải thích ở mức đơn giản.\n` : 'Hãy hỏi con đang học lớp mấy để giải thích đúng trình độ, và không dùng kiến thức vượt quá lớp của con.\n'}
 Quy tắc giảng dạy và phản hồi:
 1. Khi học sinh chào hỏi (ví dụ: "hello", "hi", "chào thầy", "chào Kiddo"):
-   - Chào đón con vui vẻ, ấm áp, xưng hô "Thầy - Con" hoặc "Kiddo AI - Bạn nhỏ".
-   - Hỏi thăm con hôm nay học lớp mấy, đang gặp bài toán hay câu hỏi Tiếng Việt, Tiếng Anh nào cần thầy hướng dẫn.
-   - Gợi ý nhẹ nhàng: "Con có thể gõ phép tính (như 51019 : 19 hoặc 52 - 27) để thầy hướng dẫn từng bước nhé!".
+   - Chào đón con vui vẻ, ấm áp, xưng hô "Thầy - Con".
+   - Hỏi con đang gặp bài Toán, câu Tiếng Việt hay từ Tiếng Anh nào cần thầy hướng dẫn.
+   - Gợi ý nhẹ nhàng: "Con có thể gõ phép tính (như ${example}) để thầy hướng dẫn từng bước nhé!".
 
-2. Khi học sinh hỏi về PHÉP CHIA (đặc biệt phép chia đặt tính cho số có hai, ba chữ số như 51019 : 19):
-   - Giải thích chuẩn phương pháp Sách giáo khoa Toán Lớp 4 Việt Nam (Đặt tính rồi tính từ trái sang phải):
-   - Nêu rõ từng lần chia:
-     • Lần 1: Lấy số chữ số phù hợp ở số bị chia, ước lượng thương, nhân ngược lại, trừ để tìm số dư.
-     • Các lần tiếp theo: Hạ từng chữ số xuống bên phải số dư, tiếp tục chia, nhân, trừ.
-   - Đưa ra kết luận rõ ràng: "Vậy 51019 : 19 = 2685 (dư 4)".
-   - Hướng dẫn con cách thử lại: (Thương × Số chia) + Số dư = Số bị chia.
+2. Khi học sinh hỏi bài Toán: giải thích từng bước ngắn gọn, đúng phương pháp Sách giáo khoa của lớp con, nêu kết quả rõ ràng và cách thử lại nếu phù hợp. Lớp 1: dùng hình (🍎 + 🍎) hoặc đếm que tính thay vì quy tắc dài.
+   - Phép chia đặt tính (lớp 4 trở lên): chia từ trái sang phải; mỗi lần chia nêu ước lượng thương, nhân ngược, trừ, hạ chữ số tiếp theo; thử lại bằng (Thương × Số chia) + Số dư = Số bị chia.
+   - Cộng trừ có nhớ (lớp 2): giải thích mượn - trả theo hàng chục.
 
-3. Khi học sinh hỏi về các chủ đề khác:
-   - Phép trừ/cộng có nhớ: Giải thích chi tiết mượn và trả theo hàng chục (ví dụ 52 - 27 mượn 1 chục thành 12 - 7 = 5, trả 1 vào 2 là 3, 5 - 3 = 2).
-   - Tiếng Việt (Từ chỉ sự vật, danh từ, động từ, chính tả): Đưa ví dụ thân thuộc như trường học, bạn bè, con vật.
-   - Tiếng Anh: Cung cấp từ vựng, phiên âm đơn giản và câu ví dụ vui.
+3. Khi học sinh hỏi Tiếng Việt: đưa ví dụ thân thuộc (trường học, bạn bè, con vật). Khi hỏi Tiếng Anh: cho từ vựng, cách đọc đơn giản và một câu ví dụ vui, đúng mức của lớp con.
 
-4. Văn phong: Thân thiện, khích lệ, dùng các biểu tượng vui tươi (🌟, 💡, ➗, 🎯, 👏, 🚀), ngắt đoạn mạch lạc, dễ đọc trên màn hình điện thoại hoặc máy tính.`;
+4. Văn phong: thân thiện, khích lệ, câu ngắn, dùng biểu tượng vui (🌟, 💡, 🎯, 👏, 🚀), ngắt đoạn mạch lạc, dễ đọc trên điện thoại. Không dùng ký hiệu in đậm kiểu ** hay ***.`;
+}
 
 // Local intelligent fallback generator if Gemini API key is missing
 function generateLocalElementaryResponse(userText: string, context?: any): string {
@@ -342,6 +358,7 @@ Kỹ năng cụ thể: ${skill}
 
 Yêu cầu nghiêm ngặt:
 1. Nội dung phải bám sát chương trình Giáo dục phổ thông Tiểu học Việt Nam (Lớp ${grade}). TUYỆT ĐỐI không cho câu hỏi vượt quá trình độ Lớp ${grade}.
+Kiến thức của lớp này: ${gradeGuide(grade)}
 2. Nếu là môn Toán: các phép tính phải chính xác 100%, có lời giải thích từng bước rõ ràng.
 3. Trả về đúng định dạng JSON duy nhất, không thêm markdown code block, không thêm lời chào:
 {
@@ -423,7 +440,7 @@ app.post('/api/ai/hint', async (req, res) => {
       const response = await generateWithFallback(ai, {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
-          systemInstruction: 'Bạn là gia sư Kiddo AI cho học sinh Tiểu học. Trả lời ngắn gọn, tích cực, truyền cảm hứng.',
+          systemInstruction: `Bạn là gia sư Kiddo AI cho học sinh Tiểu học. Trả lời ngắn gọn, tích cực, truyền cảm hứng. ${gradeGuide(studentGrade)}`,
           temperature: 0.5,
         },
       });
@@ -465,9 +482,15 @@ app.post('/api/chat', async (req, res) => {
       const contents: any[] = [];
 
       // Add context header if available
-      let contextualInstruction = SYSTEM_INSTRUCTION;
+      let contextualInstruction = buildSystemInstruction(context?.grade);
       if (context) {
-        contextualInstruction += `\n\nThông tin học sinh hiện tại:\n- Khối lớp: Lớp ${context.grade || 3}\n- Kỹ năng đang luyện: ${context.currentSkill || 'Toán học'}\n- Điểm thành thạo: ${context.mastery || 50}%\n- Kỹ năng cần rèn thêm: ${context.weakSkills || 'Phép trừ có nhớ'}`;
+        const facts = [
+          context.grade ? `- Khối lớp: Lớp ${context.grade}` : '',
+          context.currentSkill ? `- Kỹ năng đang luyện: ${context.currentSkill}` : '',
+          context.mastery !== undefined ? `- Điểm thành thạo: ${context.mastery}%` : '',
+          context.weakSkills ? `- Kỹ năng cần rèn thêm: ${context.weakSkills}` : '',
+        ].filter(Boolean);
+        if (facts.length) contextualInstruction += `\n\nThông tin học sinh hiện tại:\n${facts.join('\n')}`;
       }
 
       if (Array.isArray(history)) {
