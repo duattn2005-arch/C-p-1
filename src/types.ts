@@ -8,7 +8,8 @@ export type ViewMode =
   | 'ai-tutor' 
   | 'achievements' 
   | 'rewards' 
-  | 'curriculum';
+  | 'curriculum'
+  | 'admin';
 
 export interface AnswerOption {
   id: 'A' | 'B' | 'C' | 'D';

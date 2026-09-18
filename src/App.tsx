@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ViewMode, SubjectId, Lesson, StudentProfile, DailyMission } from './types';
+import { GradeLevel } from './types/curriculum';
 import { 
   initialStudentProfile, 
-  defaultMissions, 
-  mathLesson
+  defaultMissions 
 } from './data/mockData';
+import { 
+  skillsDatabase, 
+  getSkillById, 
+  getQuestionsBySkill, 
+  toLegacyLesson,
+  getSkillsByTopic,
+  topicsDatabase
+} from './data/curriculumData';
 import { getLessonForGradeAndSubject } from './data/gradeCurriculum';
+import { storageService } from './services/storage';
+import { findWeakestSkill } from './services/mastery';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -15,17 +25,28 @@ import { AITutorView } from './components/AITutorView';
 import { CurriculumView } from './components/CurriculumView';
 import { AchievementsView } from './components/AchievementsView';
 import { RewardsView } from './components/RewardsView';
+import { AdminView } from './components/AdminView';
+import { OnboardingModal } from './components/OnboardingModal';
 import { MobileNav } from './components/MobileNav';
 import confetti from 'canvas-confetti';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  const [profile, setProfile] = useState<StudentProfile>(initialStudentProfile);
-  const [missions, setMissions] = useState<DailyMission[]>(defaultMissions);
-  const [activeLesson, setActiveLesson] = useState<Lesson>(() => 
-    getLessonForGradeAndSubject(initialStudentProfile.grade, 'math')
-  );
+  const [profile, setProfile] = useState<StudentProfile>(() => storageService.getProfile());
+  const [missions, setMissions] = useState<DailyMission[]>(() => storageService.getDailyMissions());
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => !storageService.isOnboardingCompleted());
   const [toastNotification, setToastNotification] = useState<string | null>(null);
+
+  // Active lesson state
+  const [activeLesson, setActiveLesson] = useState<Lesson>(() => {
+    const p = storageService.getProfile();
+    const gSkills = skillsDatabase.filter((s) => s.grade === p.grade && s.subject_id === 'math');
+    if (gSkills.length > 0) {
+      const qList = getQuestionsBySkill(gSkills[0].id);
+      return toLegacyLesson(gSkills[0], qList);
+    }
+    return getLessonForGradeAndSubject(p.grade, 'math');
+  });
 
   // Show cheerful floating toast
   const showToast = (message: string) => {
@@ -37,22 +58,39 @@ export default function App() {
 
   // Change grade handler
   const handleGradeChange = (newGrade: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      grade: newGrade,
-    }));
-    showToast(`Đã chuyển sang chương trình học Lớp ${newGrade}! 🎓`);
+    const gl = (Math.max(1, Math.min(5, newGrade)) as GradeLevel);
+    const updated = storageService.updateGrade(gl);
+    setProfile(updated);
+    showToast(`Đã chuyển sang chương trình học Lớp ${gl}! 🎓`);
+  };
+
+  // Onboarding grade selection
+  const handleOnboardingSelectGrade = (grade: GradeLevel) => {
+    const updated = storageService.updateGrade(grade);
+    storageService.setOnboardingCompleted(true);
+    setProfile(updated);
+    setIsOnboardingOpen(false);
+    showToast(`Chào mừng con đến với chương trình học Lớp ${grade}! 🚀`);
+    try {
+      confetti({
+        particleCount: 60,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#68D5B5', '#5BA7FF', '#FFD65A', '#A99CFB'],
+      });
+    } catch (e) {}
   };
 
   // Toggle mission status
   const handleToggleMission = (missionId: string) => {
-    setMissions((prev) =>
-      prev.map((m) => {
+    setMissions((prev) => {
+      const updated = prev.map((m) => {
         if (m.id === missionId) {
           const nextState = !m.completed;
           if (nextState) {
-            // Reward XP on completion!
-            setProfile((p) => ({ ...p, xp: p.xp + m.xpReward }));
+            // Reward XP on completion with storage persistence
+            const res = storageService.addXP(m.xpReward, `Hoàn thành nhiệm vụ: ${m.title}`, m.id);
+            setProfile(storageService.getProfile());
             showToast(`Tuyệt vời! Hoàn thành nhiệm vụ: +${m.xpReward} XP ⭐`);
             try {
               confetti({
@@ -66,74 +104,101 @@ export default function App() {
           return { ...m, completed: nextState };
         }
         return m;
-      })
-    );
+      });
+      storageService.saveDailyMissions(updated);
+      return updated;
+    });
   };
 
-  // Start specific subject lesson with grade and lessonId
-  const handleStartSubject = (subjectId: SubjectId, lessonId?: string, grade?: number) => {
+  // Start specific subject lesson with grade and skillId
+  const handleStartSubject = (subjectId: SubjectId, skillOrLessonId?: string, grade?: number) => {
     const targetGrade = grade || profile.grade;
-    const lesson = getLessonForGradeAndSubject(targetGrade, subjectId, lessonId);
+
+    if (skillOrLessonId) {
+      const skill = getSkillById(skillOrLessonId);
+      if (skill) {
+        const questions = getQuestionsBySkill(skill.id);
+        const lesson = toLegacyLesson(skill, questions);
+        setActiveLesson(lesson);
+        setViewMode('lesson');
+        return;
+      }
+    }
+
+    // Look for first skill of target subject & grade
+    const gradeSkills = skillsDatabase.filter((s) => s.grade === targetGrade && s.subject_id === subjectId);
+    if (gradeSkills.length > 0) {
+      const firstSkill = gradeSkills[0];
+      const questions = getQuestionsBySkill(firstSkill.id);
+      const lesson = toLegacyLesson(firstSkill, questions);
+      setActiveLesson(lesson);
+      setViewMode('lesson');
+      return;
+    }
+
+    const lesson = getLessonForGradeAndSubject(targetGrade, subjectId, skillOrLessonId);
     setActiveLesson(lesson);
     setViewMode('lesson');
   };
 
-  // AI Spotlight button -> 5 min practice tailored to current grade
+  // AI Spotlight button -> 5 min practice tailored to child's weakest skill
   const handleStartAiPractice = () => {
-    const lesson = getLessonForGradeAndSubject(profile.grade, 'math');
-    setActiveLesson(lesson);
-    setViewMode('lesson');
-    showToast(`Bắt đầu thử thách 5 phút cùng Kiddo AI môn Toán Lớp ${profile.grade}! 🤖`);
+    const masteries = storageService.getAllMasteries();
+    const gradeSkills = skillsDatabase.filter((s) => s.grade === profile.grade);
+    const weakest = findWeakestSkill(masteries, gradeSkills);
+
+    if (weakest) {
+      const questions = getQuestionsBySkill(weakest.id);
+      const lesson = toLegacyLesson(weakest, questions);
+      setActiveLesson(lesson);
+      setViewMode('lesson');
+      showToast(`Bắt đầu thử thách 5 phút rèn luyện "${weakest.name}"! 🤖`);
+    } else {
+      handleStartSubject('math', undefined, profile.grade);
+    }
   };
 
   // Fast Test Pass
   const handlePassFastTest = (earnedXp: number, newMastery: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      xp: prev.xp + earnedXp,
+    storageService.addXP(earnedXp, 'Vượt cấp kiểm tra nhanh', 'fast-test');
+    const updated = storageService.getProfile();
+    setProfile({
+      ...updated,
       mathMastery: newMastery,
-      studiedMinutesToday: Math.min(prev.dailyGoalMinutes, prev.studiedMinutesToday + 5),
-    }));
+      studiedMinutesToday: Math.min(updated.dailyGoalMinutes, updated.studiedMinutesToday + 5),
+    });
     showToast(`Chúc mừng con đã vượt cấp thành công! +${earnedXp} XP 🏆`);
     setViewMode('dashboard');
   };
 
   // Fast Test Fail -> redirect to learn
   const handleFailFastTest = () => {
-    const lesson = getLessonForGradeAndSubject(profile.grade, 'math');
-    setActiveLesson(lesson);
-    setViewMode('lesson');
+    handleStartSubject('math', undefined, profile.grade);
     showToast('Kiddo AI sẽ đồng hành cùng con nắm chắc bài học này nhé! 🚀');
   };
 
   // Lesson completed
   const handleCompleteLesson = (earnedXp: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      xp: prev.xp + earnedXp,
-      mathMastery: Math.min(100, prev.mathMastery + 15),
-      studiedMinutesToday: Math.min(prev.dailyGoalMinutes, prev.studiedMinutesToday + 5),
-    }));
+    storageService.addXP(earnedXp, `Hoàn thành bài học: ${activeLesson.title}`, activeLesson.id);
+    const updated = storageService.getProfile();
+    setProfile({
+      ...updated,
+      studiedMinutesToday: Math.min(updated.dailyGoalMinutes, updated.studiedMinutesToday + 5),
+    });
     showToast(`Xuất sắc! Hoàn thành bài học: +${earnedXp} XP 🎉`);
     setViewMode('dashboard');
   };
 
   // Claim chest
   const handleClaimChest = (xpAmount: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      xp: prev.xp + xpAmount,
-    }));
+    storageService.addXP(xpAmount, 'Nhận rương phần thưởng tuần', 'weekly-chest');
+    setProfile(storageService.getProfile());
     showToast(`Đã nhận quà tuần: +${xpAmount} XP 🎁`);
   };
 
   // Update mastery directly from lesson answering
   const handleUpdateMastery = (newMastery: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      mathMastery: newMastery,
-      xp: prev.xp + 10,
-    }));
+    setProfile(storageService.getProfile());
   };
 
   return (
@@ -147,7 +212,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Persistent Top Header (only show default title when not in specialized full lesson view) */}
+        {/* Persistent Top Header */}
         <Header
           profile={profile}
           onChangeGrade={handleGradeChange}
@@ -165,6 +230,8 @@ export default function App() {
               ? 'Kho báu & Phần thưởng'
               : viewMode === 'curriculum'
               ? 'Chương trình học tập'
+              : viewMode === 'admin'
+              ? 'Quản trị CMS'
               : undefined
           }
           subtitle={
@@ -188,7 +255,7 @@ export default function App() {
               onOpenAchievements={() => setViewMode('achievements')}
               onOpenDivisionTopic={() => {
                 handleGradeChange(4);
-                handleStartSubject('math', 'math-g4-1', 4);
+                handleStartSubject('math', 'g4-m-s1', 4);
               }}
             />
           )}
@@ -237,6 +304,7 @@ export default function App() {
               onSelectGrade={handleGradeChange}
               onStartLesson={handleStartSubject}
               onOpenFastTest={() => setViewMode('fast-test')}
+              onUpdateXP={() => setProfile(storageService.getProfile())}
             />
           )}
 
@@ -251,6 +319,12 @@ export default function App() {
             <RewardsView
               profile={profile}
               onClaimChest={handleClaimChest}
+            />
+          )}
+
+          {viewMode === 'admin' && (
+            <AdminView
+              onBackToDashboard={() => setViewMode('dashboard')}
             />
           )}
         </main>
@@ -268,6 +342,12 @@ export default function App() {
       <MobileNav
         currentView={viewMode}
         onSelectView={(v) => setViewMode(v)}
+      />
+
+      {/* First-time Onboarding Modal */}
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onSelectGrade={handleOnboardingSelectGrade}
       />
     </div>
   );

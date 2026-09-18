@@ -14,6 +14,9 @@ import {
   CheckCircle2, 
   Circle 
 } from 'lucide-react';
+import { storageService } from '../services/storage';
+import { findWeakestSkill } from '../services/mastery';
+import { skillsDatabase } from '../data/curriculumData';
 
 interface DashboardViewProps {
   profile: StudentProfile;
@@ -46,31 +49,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const currentVn = gradeCatalog.vietnamese[0];
   const currentEn = gradeCatalog.english[0];
 
-  // Grade-tailored AI recommendation
-  const gradeAiRecommendations: Record<number, { title: string; skill: string }> = {
-    1: {
-      skill: 'PHÉP CỘNG TRỪ TRONG PHẠM VI 20',
-      title: 'AI đề xuất: Luyện 5 phút cộng trừ có nhớ để tính nhẩm siêu tốc! ✨',
-    },
-    2: {
-      skill: 'PHÉP TRỪ CÓ NHỚ TRONG PHẠM VI 100 (52 − 27)',
-      title: 'AI đề xuất: Luyện 5 phút phép trừ mượn 1 chục để bứt phá điểm 10! ✨',
-    },
-    3: {
-      skill: 'BẢNG NHÂN 7 & TÍNH CHU VI HÌNH CHỮ NHẬT',
-      title: 'AI đề xuất: Luyện 5 phút tính nhẩm bảng nhân 7 và công thức chu vi! ✨',
-    },
-    4: {
-      skill: 'ĐẶT TÍNH RỒI TÍNH: PHÉP CHIA 51019 : 19',
-      title: 'AI đề xuất: Luyện 5 phút phép chia cho số có hai chữ số theo đúng SGK! ✨',
-    },
-    5: {
-      skill: 'SỐ THẬP PHÂN & BÀI TOÁN CHUYỂN ĐỘNG VẬN TỐC',
-      title: 'AI đề xuất: Luyện 5 phút cộng trừ số thập phân và tính vận tốc v = s : t! ✨',
-    },
+  // Dynamic real data calculation from student mastery storage
+  const masteries = storageService.getAllMasteries();
+  const gradeSkills = skillsDatabase.filter((s) => s.grade === profile.grade);
+  const mathSkills = gradeSkills.filter((s) => s.subject_id === 'math');
+  const vnSkills = gradeSkills.filter((s) => s.subject_id === 'vietnamese');
+  const enSkills = gradeSkills.filter((s) => s.subject_id === 'english');
+
+  const calcSubjectProgress = (skills: typeof gradeSkills, fallback: number) => {
+    if (skills.length === 0) return fallback;
+    const completed = skills.filter((s) => masteries[s.id] && masteries[s.id].mastery_score >= 50).length;
+    return completed > 0 ? Math.round((completed / skills.length) * 100) : fallback;
   };
 
-  const aiRec = gradeAiRecommendations[profile.grade] || gradeAiRecommendations[2];
+  const mathProgress = calcSubjectProgress(mathSkills, profile.mathMastery || 48);
+  const vnProgress = calcSubjectProgress(vnSkills, profile.vietnameseMastery || 45);
+  const enProgress = calcSubjectProgress(enSkills, profile.englishMastery || 60);
+
+  // Truly personalized AI recommendation for weakest skill
+  const realWeakestSkill = findWeakestSkill(masteries, gradeSkills);
+  const weakestScore = realWeakestSkill && masteries[realWeakestSkill.id] ? masteries[realWeakestSkill.id].mastery_score : (profile.mathMastery || 48);
+
+  const aiRec = {
+    skill: realWeakestSkill ? realWeakestSkill.name.toUpperCase() : 'PHÉP TRỪ CÓ NHỚ TRONG PHẠM VI 100 (52 − 27)',
+    title: realWeakestSkill ? `AI đề xuất: Luyện 5 phút ${realWeakestSkill.name} để bứt phá điểm 10! ✨` : 'AI đề xuất: Luyện 5 phút phép trừ mượn 1 chục để bứt phá điểm 10! ✨',
+    mastery: weakestScore,
+  };
 
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col gap-7 pb-16">
@@ -147,7 +151,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </h2>
             </div>
             <span className="text-[13px] font-extrabold text-slate-500 bg-white border border-slate-100 px-3 py-1 rounded-full shadow-xs">
-              Lớp {profile.grade} • Học kỳ 2
+              Lớp {profile.grade} • Học kỳ 1
             </span>
           </div>
 
@@ -161,7 +165,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     🔢
                   </div>
                   <span className="inline-flex items-center gap-1 bg-[#EFF6FF] text-[#2563EB] px-3 py-1 rounded-full font-black text-[15px]">
-                    ⭐ {currentMath?.progress || 70}%
+                    ⭐ {mathProgress}%
                   </span>
                 </div>
 
@@ -177,12 +181,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex justify-between text-[14px] font-extrabold">
                     <span className="text-slate-400">Tiến độ bài học</span>
-                    <span className="text-[#1D4ED8]">{currentMath?.progress || 70}%</span>
+                    <span className="text-[#1D4ED8]">{mathProgress}%</span>
                   </div>
                   <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5">
                     <div
                       className="h-full bg-[#3B82F6] rounded-full transition-all duration-500"
-                      style={{ width: `${currentMath?.progress || 70}%` }}
+                      style={{ width: `${mathProgress}%` }}
                     />
                   </div>
                 </div>
@@ -205,7 +209,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     📖
                   </div>
                   <span className="inline-flex items-center gap-1 bg-[#FFF4F2] text-[#E86350] px-3 py-1 rounded-full font-black text-[15px]">
-                    ⭐ {currentVn?.progress || 50}%
+                    ⭐ {vnProgress}%
                   </span>
                 </div>
 
@@ -221,12 +225,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex justify-between text-[14px] font-extrabold">
                     <span className="text-slate-400">Tiến độ bài học</span>
-                    <span className="text-[#E86350]">{currentVn?.progress || 50}%</span>
+                    <span className="text-[#E86350]">{vnProgress}%</span>
                   </div>
                   <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5">
                     <div
                       className="h-full bg-[#FF785A] rounded-full transition-all duration-500"
-                      style={{ width: `${currentVn?.progress || 50}%` }}
+                      style={{ width: `${vnProgress}%` }}
                     />
                   </div>
                 </div>
@@ -249,7 +253,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     🇬🇧
                   </div>
                   <span className="inline-flex items-center gap-1 bg-[#F5F3FF] text-[#7C3AED] px-3 py-1 rounded-full font-black text-[15px]">
-                    ⭐ {currentEn?.progress || 80}%
+                    ⭐ {enProgress}%
                   </span>
                 </div>
 
@@ -265,12 +269,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex justify-between text-[14px] font-extrabold">
                     <span className="text-slate-400">Tiến độ bài học</span>
-                    <span className="text-[#6D28D9]">{currentEn?.progress || 80}%</span>
+                    <span className="text-[#6D28D9]">{enProgress}%</span>
                   </div>
                   <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5">
                     <div
                       className="h-full bg-[#8B5CF6] rounded-full transition-all duration-500"
-                      style={{ width: `${currentEn?.progress || 80}%` }}
+                      style={{ width: `${enProgress}%` }}
                     />
                   </div>
                 </div>
@@ -318,7 +322,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-black text-[22px] text-[#7C3AED]">
-                        {profile.mathMastery}%
+                        {aiRec.mastery}%
                       </span>
                       <span className="text-[12px] font-bold text-slate-400">/ 100%</span>
                     </div>
@@ -326,7 +330,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5">
                     <div
                       className="h-full bg-gradient-to-r from-[#8B5CF6] to-[#5BA7FF] rounded-full transition-all duration-700"
-                      style={{ width: `${profile.mathMastery}%` }}
+                      style={{ width: `${aiRec.mastery}%` }}
                     />
                   </div>
                   <div className="flex justify-between items-center mt-2 text-[12px] font-bold text-slate-400">

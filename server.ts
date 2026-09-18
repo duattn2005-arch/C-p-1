@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -7,7 +8,7 @@ import { GoogleGenAI } from '@google/genai';
 import { calculateLongDivision } from './src/utils/divisionHelper';
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
 app.use(express.json());
 
@@ -16,8 +17,12 @@ let geminiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI | null {
   if (!geminiClient) {
     const key = process.env.GEMINI_API_KEY;
-    if (key && key !== 'MY_GEMINI_API_KEY') {
-      geminiClient = new GoogleGenAI({ apiKey: key });
+    if (key && key !== 'MY_GEMINI_API_KEY' && key.trim().length > 10) {
+      try {
+        geminiClient = new GoogleGenAI({ apiKey: key });
+      } catch (e) {
+        console.warn('Failed to initialize GoogleGenAI with key:', e);
+      }
     }
   }
   return geminiClient;
@@ -40,20 +45,21 @@ Quy tắc giảng dạy và phản hồi:
    - Hướng dẫn con cách thử lại: (Thương × Số chia) + Số dư = Số bị chia.
 
 3. Khi học sinh hỏi về các chủ đề khác:
-   - Phép trừ/cộng có nhớ: Giải thích chi tiết mượn và trả theo hàng chục.
+   - Phép trừ/cộng có nhớ: Giải thích chi tiết mượn và trả theo hàng chục (ví dụ 52 - 27 mượn 1 chục thành 12 - 7 = 5, trả 1 vào 2 là 3, 5 - 3 = 2).
    - Tiếng Việt (Từ chỉ sự vật, danh từ, động từ, chính tả): Đưa ví dụ thân thuộc như trường học, bạn bè, con vật.
    - Tiếng Anh: Cung cấp từ vựng, phiên âm đơn giản và câu ví dụ vui.
 
 4. Văn phong: Thân thiện, khích lệ, dùng các biểu tượng vui tươi (🌟, 💡, ➗, 🎯, 👏, 🚀), ngắt đoạn mạch lạc, dễ đọc trên màn hình điện thoại hoặc máy tính.`;
 
 // Local intelligent fallback generator if Gemini API key is missing
-function generateLocalElementaryResponse(userText: string): string {
+function generateLocalElementaryResponse(userText: string, context?: any): string {
   const trimmed = userText.trim();
   const lower = trimmed.toLowerCase();
 
   // Greetings
   if (['hello', 'hi', 'chào', 'chao', 'xin chào', 'halo', 'hey'].some(g => lower.startsWith(g) || lower === g)) {
-    return `Chào con! Thầy là Kiddo AI đây 🤖✨\n\nRất vui được gặp con hôm nay! Con đang học bài nào hay có câu hỏi gì cần thầy giúp không? Con có thể gõ bất kỳ phép tính nào (ví dụ: phép chia 51019 : 19, phép trừ có nhớ 52 − 27) hoặc hỏi thầy về môn Tiếng Việt, Tiếng Anh nhé! 🚀`;
+    const gradeInfo = context?.grade ? `Lớp ${context.grade}` : 'Tiểu học';
+    return `Chào con! Thầy là Kiddo AI đây 🤖✨\n\nRất vui được đồng hành cùng con trong chương trình học ${gradeInfo}! Con đang gặp bài toán, câu Tiếng Việt hay từ vựng Tiếng Anh nào cần thầy hướng dẫn từng bước không? Cứ hỏi thầy nhé! 🚀`;
   }
 
   // Check for division pattern: e.g., "51019 : 19", "51019/19", "chia 51019 cho 19"
@@ -85,22 +91,115 @@ function generateLocalElementaryResponse(userText: string): string {
   }
 
   // Check for multiplication table
-  if (lower.includes('bảng nhân') || lower.includes('bảng cửu chương')) {
-    return `Mẹo nhớ bảng nhân của Kiddo AI nè con! 🌟\nVí dụ bảng nhân 7: Mỗi lần nhân thêm 1 số là cộng thêm đúng 7 đơn vị (7, 14, 21, 28, 35, 42, 49, 56, 63, 70). Con có thể lấy mốc 7 × 5 = 35 làm điểm tựa để nhớ nhé!`;
+  if (lower.includes('bảng nhân') || lower.includes('bảng cửu chương') || lower.includes('bảng nhân 7')) {
+    return `Mẹo nhớ bảng nhân 7 của Kiddo AI nè con! 🌟\nMỗi lần nhân thêm 1 số là cộng thêm đúng 7 đơn vị:\n• 7 × 1 = 7\n• 7 × 2 = 14\n• 7 × 5 = 35 (mốc dễ nhớ)\n• 7 × 6 = 42\n• 7 × 7 = 49\n• 7 × 8 = 56\n• 7 × 9 = 63\n• 7 × 10 = 70.`;
+  }
+
+  // Check for parts of speech (Tiếng Việt)
+  if (lower.includes('danh từ') || lower.includes('động từ') || lower.includes('tính từ')) {
+    return `Mẹo phân biệt từ loại Tiếng Việt dễ nhớ nè con! 📖✨\n• **Danh từ:** Từ chỉ sự vật, người, con vật, cây cối (ví dụ: *học sinh, cô giáo, cái bàn, con mèo*).\n• **Động từ:** Từ chỉ hoạt động, trạng thái (ví dụ: *chạy, nhảy, đọc sách, múa hát*).\n• **Tính từ:** Từ chỉ màu sắc, hình dáng, tính nết (ví dụ: *xanh biếc, chăm chỉ, tròn xoe, thông minh*).`;
   }
 
   return `Thầy Kiddo AI đã nhận được câu hỏi: "${trimmed}" của con! 💡\n\nCon hãy cùng thầy quan sát và phân tích từng bước nhé. Nếu đây là bài tập Toán, con có thể gõ rõ số hoặc biểu thức để thầy hướng dẫn phương pháp đặt tính rồi tính chi tiết từng bước cho con nhé! 🌟`;
 }
 
-// API Health Check
+// Deterministic Math Question Validator & Reviewer
+function reviewAndVerifyMathQuestion(q: any): { valid: boolean; question: any; error?: string } {
+  if (!q.question || !Array.isArray(q.choices) || q.choices.length < 2 || !q.correctAnswer) {
+    return { valid: false, question: q, error: 'Cấu trúc câu hỏi thiếu trường bắt buộc' };
+  }
+
+  // Parse arithmetic expression like: "52 - 27", "62 − 38 = ?", "15 + 28 = ?", "7 * 8 = ?"
+  const text = `${q.question} ${q.formula || ''}`;
+  const clean = text.replace(/−/g, '-').replace(/×/g, '*').replace(/÷|:/g, '/');
+  const match = clean.match(/(\d+)\s*([+\-*\/])\s*(\d+)/);
+
+  if (match) {
+    const n1 = parseInt(match[1], 10);
+    const op = match[2];
+    const n2 = parseInt(match[3], 10);
+
+    let expected = 0;
+    if (op === '+') expected = n1 + n2;
+    if (op === '-') expected = n1 - n2;
+    if (op === '*') expected = n1 * n2;
+    if (op === '/' && n2 > 0) expected = Math.floor(n1 / n2);
+
+    const expectedStr = expected.toString();
+    const currentCorrect = q.correctAnswer.toString().trim();
+
+    // If AI hallucinates an incorrect answer for a deterministic math calculation
+    if (currentCorrect !== expectedStr && !currentCorrect.includes(expectedStr)) {
+      console.warn(`[Deterministic Math Validator]: Corrected AI math calculation from "${currentCorrect}" to "${expectedStr}" for "${n1} ${op} ${n2}"`);
+      q.correctAnswer = expectedStr;
+      if (!q.choices.includes(expectedStr)) {
+        q.choices[0] = expectedStr;
+      }
+    }
+  }
+
+  // Ensure correctAnswer is included in choices
+  if (!q.choices.includes(q.correctAnswer)) {
+    q.choices.push(q.correctAnswer);
+  }
+
+  return { valid: true, question: q };
+}
+
+// Fallback question generator when AI is unavailable
+function generateLocalQuestionSet(grade: number, subject: string, skillName: string, count: number = 3) {
+  const questions: any[] = [];
+  for (let i = 1; i <= count; i++) {
+    if (subject === 'math') {
+      const a = 35 + (grade * 12) + (i * 5);
+      const b = 16 + (grade * 3) + (i * 2);
+      const res = a - b;
+      questions.push({
+        question: `Tính nhẩm hoặc đặt tính: ${a} − ${b} = ?`,
+        choices: [`${res}`, `${res + 10}`, `${res - 2}`, `${res + 2}`],
+        correctAnswer: `${res}`,
+        explanation: `Ta thực hiện trừ từ phải sang trái: ${a} − ${b} = ${res}.`,
+        hint: `Quan sát hàng đơn vị, nếu cần thì mượn 1 chục rồi trừ nhé con!`,
+        difficulty: Math.min(5, Math.max(1, (i % 3) + 1)),
+      });
+    } else if (subject === 'vietnamese') {
+      questions.push({
+        question: `Chọn từ ngữ thích hợp để hoàn thiện câu văn sau (Lớp ${grade}):`,
+        choices: ['chăm chỉ học tập', 'lười biếng', 'quậy phá', 'ngủ gật'],
+        correctAnswer: 'chăm chỉ học tập',
+        explanation: 'Học sinh ngoan luôn chăm chỉ học tập để đạt kết quả tốt.',
+        hint: 'Chọn từ mang ý nghĩa tích cực khen ngợi đức tính tốt nhé!',
+        difficulty: 2,
+      });
+    } else {
+      questions.push({
+        question: `Choose the correct answer for Grade ${grade}:`,
+        choices: ['I like learning English', 'I likes English', 'Me like English', 'I is like English'],
+        correctAnswer: 'I like learning English',
+        explanation: 'With subject "I", verb remains in base form: "like".',
+        hint: 'Pay attention to subject-verb agreement.',
+        difficulty: 2,
+      });
+    }
+  }
+  return questions;
+}
+
+// ==========================================
+// API ENDPOINTS
+// ==========================================
+
+// Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    geminiConfigured: !!getGemini(),
+    time: new Date().toISOString() 
+  });
 });
 
-// In-memory cache for audio buffers
+// Authentic Vietnamese Text-to-Speech Streaming Proxy
 const ttsCache = new Map<string, Buffer>();
-
-// Pre-generated 450ms MP3 silence buffer to insert natural pauses between rhythmic segments
 let silenceMp3Buffer: Buffer = Buffer.alloc(0);
 try {
   if (fs.existsSync('/tmp/silence_450ms.mp3')) {
@@ -110,55 +209,9 @@ try {
     silenceMp3Buffer = fs.readFileSync('/tmp/silence_450ms.mp3');
   }
 } catch (e) {
-  console.warn('Could not initialize silence MP3 buffer, continuing without extra pause frames:', e);
+  // silent
 }
 
-interface PacedSegment {
-  text: string;
-  pauseAfter: boolean;
-}
-
-// Function to split text into paced segments with deliberate pauses
-function parseToPacedSegments(text: string, maxLen = 150): PacedSegment[] {
-  let rawSegments: string[] = [];
-  if (text.includes('||')) {
-    // Explicit rhythmic chunks (e.g. Question || Option A || Option B ...)
-    rawSegments = text
-      .split(/\s*\|\|\s*/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  } else {
-    // Natural sentence pauses on . ! ? ; or newlines
-    rawSegments = text
-      .replace(/[*#`_~]/g, '')
-      .split(/(?<=[.!?;\n])\s+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-
-  const result: PacedSegment[] = [];
-  for (const seg of rawSegments) {
-    if (seg.length <= maxLen) {
-      result.push({ text: seg, pauseAfter: true });
-    } else {
-      const words = seg.split(' ');
-      let current = '';
-      for (const w of words) {
-        if ((current + ' ' + w).trim().length <= maxLen) {
-          current = (current + ' ' + w).trim();
-        } else {
-          if (current) result.push({ text: current, pauseAfter: false });
-          current = w;
-        }
-      }
-      if (current) result.push({ text: current, pauseAfter: true });
-    }
-  }
-
-  return result.length > 0 ? result : [{ text: text.slice(0, maxLen), pauseAfter: false }];
-}
-
-// API: Authentic Vietnamese Text-to-Speech Streaming Proxy with rhythmic pacing
 app.get('/api/tts', async (req, res) => {
   try {
     const rawText = (req.query.text as string) || '';
@@ -171,61 +224,37 @@ app.get('/api/tts', async (req, res) => {
 
     const cacheKey = `${lang}:${cleanText}`;
     if (ttsCache.has(cacheKey)) {
-      const cached = ttsCache.get(cacheKey)!;
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.send(cached);
+      return res.send(ttsCache.get(cacheKey)!);
     }
 
-    const segments = parseToPacedSegments(cleanText);
-    const audioBuffers: Buffer[] = [];
+    const targetLang = lang === 'en' || lang === 'en-us' ? 'en' : 'vi';
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
+      cleanText.slice(0, 200)
+    )}&tl=${targetLang}&client=tw-ob`;
 
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const targetLang = lang === 'en' || lang === 'en-us' ? 'en' : 'vi';
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
-        seg.text
-      )}&tl=${targetLang}&client=tw-ob`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
 
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
-
-      if (response.ok) {
-        const buf = Buffer.from(await response.arrayBuffer());
-        audioBuffers.push(buf);
-
-        // If this segment has a pause and is not the final segment, append natural silence pause
-        if (seg.pauseAfter && i < segments.length - 1 && silenceMp3Buffer.length > 0) {
-          audioBuffers.push(silenceMp3Buffer);
-        }
-      }
+    if (response.ok) {
+      const buf = Buffer.from(await response.arrayBuffer());
+      ttsCache.set(cacheKey, buf);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(buf);
     }
-
-    if (audioBuffers.length === 0) {
-      return res.status(502).json({ error: 'Could not generate audio' });
-    }
-
-    const combined = Buffer.concat(audioBuffers);
-    if (ttsCache.size > 300) {
-      const firstKey = ttsCache.keys().next().value;
-      if (firstKey) ttsCache.delete(firstKey);
-    }
-    ttsCache.set(cacheKey, combined);
-
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(combined);
+    return res.status(502).json({ error: 'Could not generate audio' });
   } catch (err: any) {
-    console.error('TTS error:', err);
     res.status(500).json({ error: 'TTS conversion failed' });
   }
 });
 
-// API: Long Division Step-by-Step Calculator
+// Step-by-Step Long Division Calculator
 app.post('/api/calculate-division', (req, res) => {
   try {
     const { dividend, divisor } = req.body;
@@ -243,9 +272,135 @@ app.post('/api/calculate-division', (req, res) => {
   }
 });
 
-// API: Chat with Kiddo AI Tutor
+// AI QUESTION GENERATOR ENDPOINT
+app.post('/api/ai/generate-questions', async (req, res) => {
+  const { grade = 3, subject = 'math', topic = 'Phép trừ', skill = 'Phép trừ có nhớ', difficulty = 2, count = 3 } = req.body;
+
+  try {
+    const ai = getGemini();
+
+    if (ai) {
+      const prompt = `Bạn là chuyên gia sư phạm tiểu học Việt Nam. Hãy tạo ${count} câu hỏi trắc nghiệm khách quan dành cho học sinh Lớp ${grade}.
+Môn học: ${subject === 'math' ? 'Toán học' : subject === 'vietnamese' ? 'Tiếng Việt' : 'Tiếng Anh'}
+Chủ đề: ${topic}
+Kỹ năng cụ thể: ${skill}
+Độ khó (1 đến 5): ${difficulty}
+
+Yêu cầu nghiêm ngặt:
+1. Nội dung phải bám sát chương trình Giáo dục phổ thông Tiểu học Việt Nam (Lớp ${grade}). TUYỆT ĐỐI không cho câu hỏi vượt quá trình độ Lớp ${grade}.
+2. Nếu là môn Toán: các phép tính phải chính xác 100%, có lời giải thích từng bước rõ ràng.
+3. Trả về đúng định dạng JSON duy nhất, không thêm markdown code block, không thêm lời chào:
+{
+  "questions": [
+    {
+      "question": "Nội dung câu hỏi",
+      "choices": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
+      "correctAnswer": "Đáp án đúng",
+      "explanation": "Giải thích chi tiết",
+      "hint": "Gợi ý nhỏ không lộ đáp án",
+      "difficulty": ${difficulty}
+    }
+  ]
+}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0.3,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const responseText = response.text || '';
+      const parsed = JSON.parse(responseText);
+
+      if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+        // Deterministic validation layer
+        const validatedQuestions = parsed.questions.map((q: any) => {
+          const reviewed = reviewAndVerifyMathQuestion(q);
+          return reviewed.question;
+        });
+
+        return res.json({
+          questions: validatedQuestions,
+          source: 'gemini_ai',
+          validation_status: 'passed',
+        });
+      }
+    }
+
+    // Graceful fallback to local curriculum generator
+    const fallbackQuestions = generateLocalQuestionSet(grade, subject, skill, count);
+    return res.json({
+      questions: fallbackQuestions,
+      source: 'local_fallback',
+      validation_status: 'passed',
+      message: 'Kiddo AI đang nghỉ một chút, mình tiếp tục với bài luyện có sẵn nhé! ✨',
+    });
+  } catch (error: any) {
+    console.error('AI question generator error, using fallback:', error);
+    const fallbackQuestions = generateLocalQuestionSet(grade, subject, skill, count);
+    return res.json({
+      questions: fallbackQuestions,
+      source: 'local_fallback',
+      validation_status: 'passed',
+      message: 'Kiddo AI đang nghỉ một chút, mình tiếp tục với bài luyện có sẵn nhé! ✨',
+    });
+  }
+});
+
+// AI PROGRESSIVE HINT ENDPOINT
+app.post('/api/ai/hint', async (req, res) => {
+  const { question, choices, correctAnswer, studentGrade = 3, hintLevel = 1 } = req.body;
+
+  try {
+    const ai = getGemini();
+
+    if (ai) {
+      let prompt = '';
+      if (hintLevel === 1) {
+        prompt = `Học sinh Lớp ${studentGrade} đang làm câu hỏi: "${question}". Đáp án đúng là "${correctAnswer}". Hãy đưa ra một GỢI Ý NHỎ BƯỚC ĐẦU (1-2 câu), gợi ý hướng suy nghĩ, TUYỆT ĐỐI KHÔNG NÓI ĐÁP ÁN.`;
+      } else if (hintLevel === 2) {
+        prompt = `Học sinh Lớp ${studentGrade} đang làm câu hỏi: "${question}". Hãy đưa ra GỢI Ý CHI TIẾT HƠN (hướng dẫn cách mượn số, tra từ điển hoặc nhận biết từ loại), vẫn KHÔNG nói thẳng đáp án.`;
+      } else {
+        prompt = `Học sinh Lớp ${studentGrade} muốn xem cách giải chi tiết câu hỏi: "${question}". Đáp án đúng là "${correctAnswer}". Hãy giải thích từng bước thật ân cần, ngắn gọn, dễ hiểu.`;
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction: 'Bạn là gia sư Kiddo AI cho học sinh Tiểu học. Trả lời ngắn gọn, tích cực, truyền cảm hứng.',
+          temperature: 0.5,
+        },
+      });
+
+      const reply = response.text || '';
+      if (reply.trim()) {
+        return res.json({ hint: reply.trim(), level: hintLevel });
+      }
+    }
+
+    // Local Fallback hint
+    const fallbackHints: Record<number, string> = {
+      1: 'Con hãy quan sát kỹ từ hàng đơn vị từ phải sang trái hoặc tìm từ khóa chính của câu nhé!',
+      2: 'Nếu là phép trừ có nhớ, hãy nhớ mượn 1 chục ở hàng chục rồi trả lại vào số trừ nhé!',
+      3: `Đáp án đúng là "${correctAnswer}". Ta thực hiện tính toán từng bước theo đúng quy tắc SGK nhé!`,
+    };
+
+    return res.json({ hint: fallbackHints[hintLevel] || fallbackHints[1], level: hintLevel });
+  } catch (error: any) {
+    return res.json({
+      hint: 'Hãy quan sát kỹ từng phương án và làm theo từng bước con nhé! 🌟',
+      level: hintLevel,
+    });
+  }
+});
+
+// CONTEXT-AWARE AI TUTOR CHAT ENDPOINT
 app.post('/api/chat', async (req, res) => {
-  const { message, history } = req.body;
+  const { message, history, context } = req.body;
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'Tin nhắn không hợp lệ' });
@@ -255,8 +410,13 @@ app.post('/api/chat', async (req, res) => {
     const ai = getGemini();
 
     if (ai) {
-      // Build conversation history contents for Gemini
       const contents: any[] = [];
+
+      // Add context header if available
+      let contextualInstruction = SYSTEM_INSTRUCTION;
+      if (context) {
+        contextualInstruction += `\n\nThông tin học sinh hiện tại:\n- Khối lớp: Lớp ${context.grade || 3}\n- Kỹ năng đang luyện: ${context.currentSkill || 'Toán học'}\n- Điểm thành thạo: ${context.mastery || 50}%\n- Kỹ năng cần rèn thêm: ${context.weakSkills || 'Phép trừ có nhớ'}`;
+      }
 
       if (Array.isArray(history)) {
         for (const item of history.slice(-6)) {
@@ -275,11 +435,11 @@ app.post('/api/chat', async (req, res) => {
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents,
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.7,
+          systemInstruction: contextualInstruction,
+          temperature: 0.6,
         },
       });
 
@@ -289,18 +449,16 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Fallback to local intelligent pedagogical engine
-    const fallbackReply = generateLocalElementaryResponse(message);
+    const fallbackReply = generateLocalElementaryResponse(message, context);
     return res.json({ reply: fallbackReply });
   } catch (error: any) {
-    console.error('Gemini API error, falling back to local solver:', error);
-    const fallbackReply = generateLocalElementaryResponse(message);
+    console.error('Gemini API error, falling back:', error);
+    const fallbackReply = generateLocalElementaryResponse(message, context);
     return res.json({ reply: fallbackReply });
   }
 });
 
 async function startServer() {
-  // Vite middleware in dev mode
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -316,7 +474,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`KIDDO.AI Full-Stack Server running on port ${PORT}`);
+    console.log(`KIDDO.AI Server running on port ${PORT}`);
   });
 }
 

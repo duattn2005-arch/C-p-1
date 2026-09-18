@@ -8,7 +8,8 @@ import {
   Award, 
   Gift, 
   Rocket, 
-  Sparkles 
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -29,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'ai-tutor', label: 'AI Tutor', icon: <Bot className="w-5 h-5" /> },
     { id: 'achievements', label: 'Thành tích', icon: <Award className="w-5 h-5" /> },
     { id: 'rewards', label: 'Phần thưởng', icon: <Gift className="w-5 h-5" /> },
+    { id: 'admin', label: 'Quản trị CMS', icon: <ShieldCheck className="w-5 h-5" /> },
   ];
 
   return (
