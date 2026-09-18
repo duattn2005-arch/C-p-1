@@ -41,6 +41,31 @@ export interface CurriculumLesson {
   order_index: number;
 }
 
+export type ShapeName = 'circle' | 'square' | 'rectangle' | 'triangle';
+
+// Pictures shown with a question. Young learners see objects, colors and shapes instead of bare numbers.
+export type QuestionVisual =
+  // Groups of the same emoji, e.g. 🍰🍰 + 🍰 = ?  (crossed = how many are taken away, op '?' = compare)
+  | { kind: 'objects'; emoji: string; groups: { count: number; crossed?: number }[]; op?: '+' | '−' | '×' | '?' }
+  // A row of different emojis, e.g. to talk about left / right / middle
+  | { kind: 'row'; items: string[] }
+  | { kind: 'picture'; emoji: string }
+  | { kind: 'color'; hex: string }
+  | { kind: 'shape'; shape: ShapeName; hex?: string }
+  | { kind: 'bars'; items: { label: string; value: number; hex?: string }[]; unit?: string }
+  | { kind: 'ruler'; length: number; start?: number }
+  | { kind: 'clock'; hour: number; minute: number }
+  | { kind: 'rect'; w: number; h: number; unit: string }
+  | { kind: 'pie'; parts: number; filled: number };
+
+// What an answer button shows besides its text (a picture, a color swatch or a shape)
+export interface OptionFace {
+  emoji?: string;
+  hex?: string;
+  shape?: ShapeName;
+  only?: boolean; // show just the picture, hide the text (used when the text would give the answer away)
+}
+
 export interface CurriculumQuestion {
   id: string;
   grade: GradeLevel;
@@ -58,6 +83,8 @@ export interface CurriculumQuestion {
   hint: string;
   hint_level_2?: string;
   step_by_step?: string[];
+  visual?: QuestionVisual;
+  choice_faces?: (OptionFace | null)[]; // aligned with choices
   source_type: 'curriculum' | 'ai_generated' | 'teacher_created';
   ai_generated: boolean;
   validation_status: 'approved' | 'pending' | 'rejected';

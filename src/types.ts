@@ -1,6 +1,8 @@
+import type { OptionFace, QuestionVisual } from './types/curriculum';
+
 export type SubjectId = 'math' | 'vietnamese' | 'english';
 
-export type ViewMode = 
+export type ViewMode =
   | 'dashboard' 
   | 'lesson' 
   | 'fast-test' 
@@ -14,6 +16,7 @@ export type ViewMode =
 export interface AnswerOption {
   id: 'A' | 'B' | 'C' | 'D';
   text: string;
+  face?: OptionFace;
 }
 
 export interface Question {
@@ -21,6 +24,7 @@ export interface Question {
   prompt: string;
   subPrompt?: string;
   formula?: string;
+  visual?: QuestionVisual;
   options: AnswerOption[];
   correctOptionId: 'A' | 'B' | 'C' | 'D';
   hint: string;
