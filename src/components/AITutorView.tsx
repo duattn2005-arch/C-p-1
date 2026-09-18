@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StudentProfile } from '../types';
 import { KiddoMascot } from './KiddoMascot';
+import { ChatMarkdown } from './ChatMarkdown';
 import { speakVietnamese, stopSpeaking } from '../utils/vietnameseSpeech';
 import { storageService } from '../services/storage';
 import { findWeakestSkill } from '../services/mastery';
@@ -342,7 +343,7 @@ export const AITutorView: React.FC<AITutorViewProps> = ({
                     }`}
                   >
                     <div className="text-sm font-bold whitespace-pre-line leading-relaxed">
-                      {msg.text}
+                      {isAi ? <ChatMarkdown text={msg.text} /> : msg.text}
                     </div>
 
                     {/* AI Audio & Action Buttons */}
