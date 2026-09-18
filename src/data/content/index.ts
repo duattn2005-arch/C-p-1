@@ -5,6 +5,7 @@ import { mathGrade3 } from './math3.js';
 import { mathGrade4 } from './math4.js';
 import { mathGrade5 } from './math5.js';
 import { englishGrade1, englishGrade2 } from './english12.js';
+import { vietnameseGrade1 } from './vietnamese1b.js';
 import { englishGrade3, englishGrade4, englishGrade5 } from './english345.js';
 
 // topic id -> the three skills taught in that topic (each skill knows how to make its own questions)
@@ -19,4 +20,5 @@ export const topicSkillDefs: Record<string, SkillDef[]> = {
   ...englishGrade3,
   ...englishGrade4,
   ...englishGrade5,
+  ...vietnameseGrade1,
 };
