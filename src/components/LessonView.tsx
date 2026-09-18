@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lesson, StudentProfile } from '../types';
 import { KiddoMascot } from './KiddoMascot';
 import confetti from 'canvas-confetti';
@@ -11,6 +11,7 @@ import {
 import { QuestionVisualView, OptionBody } from './QuestionVisual';
 import { storageService } from '../services/storage';
 import { updateSkillMasteryAfterAnswer } from '../services/mastery';
+import { describeAttempt } from '../services/attemptLog';
 import { 
   ArrowLeft, 
   Calculator, 
@@ -66,11 +67,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
   );
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [consecutiveCorrect, setConsecutiveCorrect] = useState<number>(0);
-  const [currentMasteryScore, setCurrentMasteryScore] = useState<number>(() => {
-    return storageService.getSkillMastery(lesson.id).mastery_score || profile.mathMastery || 48;
-  });
-
   const currentQuestion = lesson.questions[currentQuestionIndex] || lesson.questions[0];
+  // A practice lesson mixes skills, so every question carries the skill it trains
+  const skillId = currentQuestion.skillId ?? lesson.id;
+  const shownAt = useRef<number>(Date.now());
+  const [currentMasteryScore, setCurrentMasteryScore] = useState<number>(() => storageService.getSkillMastery(skillId).mastery_score);
   const totalQuestions = lesson.questions.length;
   const firstHint = FIRST_HINT[lesson.subjectId] ?? FIRST_HINT.math;
   const progressPercent = Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
@@ -83,6 +84,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setIsSubmitted(false);
     setIsCorrect(null);
     setHintStage(0);
+    shownAt.current = Date.now();
+    setCurrentMasteryScore(storageService.getSkillMastery(skillId).mastery_score);
     setAiSpeechMessage(
       `"Cố lên, ${profile.name} làm được mà! Hãy quan sát kỹ câu hỏi số ${currentQuestionIndex + 1} nhé! ✨"`
     );
@@ -90,7 +93,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     return () => {
       stopSpeaking();
     };
-  }, [currentQuestionIndex, profile.name]);
+  }, [currentQuestionIndex, profile.name, skillId]);
 
   // Handle Option Click
   const handleSelectOption = (optionId: 'A' | 'B' | 'C' | 'D') => {
@@ -102,7 +105,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setIsCorrect(correct);
 
     // Dynamic Mastery Calculation
-    const prevMastery = storageService.getSkillMastery(lesson.id);
+    const prevMastery = storageService.getSkillMastery(skillId);
     const nextStreak = correct ? consecutiveCorrect + 1 : -1;
     const diffMap: Record<string, 1 | 2 | 3 | 4 | 5> = { easy: 2, medium: 3, hard: 4 };
     const diffLevel = diffMap[currentQuestion.difficulty] || 3;
@@ -112,14 +115,14 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setCurrentMasteryScore(updated.mastery_score);
 
     // Record student attempt history
-    storageService.recordAttempt({
-      student_id: 'student_1',
-      question_id: currentQuestion.id,
-      skill_id: lesson.id,
-      chosen_answer: optionId,
-      is_correct: correct,
-      time_spent_seconds: 12,
-    });
+    storageService.recordAttempt(
+      describeAttempt(currentQuestion, optionId, {
+        fallbackSkillId: lesson.id,
+        startedAt: shownAt.current,
+        hintStage,
+        source: lesson.isPractice ? 'practice' : 'lesson',
+      })
+    );
 
     if (correct) {
       setConsecutiveCorrect((prev) => prev + 1);
@@ -162,6 +165,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
 
   // Handle Retry
   const handleRetry = () => {
+    shownAt.current = Date.now();
     stopSpeaking();
     setIsSpeaking(false);
     setSelectedOptionId(null);

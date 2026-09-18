@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Skill, CurriculumQuestion } from '../types/curriculum';
 import { getQuestionsBySkill, toLegacyQuestion } from '../data/curriculumData';
 import { evaluatePreTestScore } from '../services/mastery';
+import { describeAttempt } from '../services/attemptLog';
+import { storageService } from '../services/storage';
 import { KiddoMascot } from './KiddoMascot';
 import { QuestionVisualView, OptionBody } from './QuestionVisual';
 import confetti from 'canvas-confetti';
@@ -34,6 +36,7 @@ export const QuickCheckModal: React.FC<QuickCheckModalProps> = ({
   const [isFinished, setIsFinished] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
   const [confirmIndex, setConfirmIndex] = useState(0);
+  const [shownAt, setShownAt] = useState<number>(() => Date.now());
 
   const currentQ = questions[currentIndex] ? toLegacyQuestion(questions[currentIndex]) : null;
 
@@ -45,6 +48,9 @@ export const QuickCheckModal: React.FC<QuickCheckModalProps> = ({
   const handleConfirmAnswer = () => {
     if (!selectedOption || !currentQ) return;
     setIsAnswerSubmitted(true);
+    storageService.recordAttempt(
+      describeAttempt(currentQ, selectedOption, { fallbackSkillId: skill.id, startedAt: shownAt, source: 'quick-check' })
+    );
 
     const isCorrect = selectedOption === currentQ.correctOptionId;
     const newAnswers = { ...userAnswers, [currentIndex]: selectedOption };
@@ -53,6 +59,7 @@ export const QuickCheckModal: React.FC<QuickCheckModalProps> = ({
     setTimeout(() => {
       if (currentIndex + 1 < questions.length) {
         setCurrentIndex((prev) => prev + 1);
+        setShownAt(Date.now());
         setSelectedOption(null);
         setIsAnswerSubmitted(false);
       } else {

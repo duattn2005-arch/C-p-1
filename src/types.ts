@@ -21,6 +21,7 @@ export interface AnswerOption {
 
 export interface Question {
   id: string;
+  skillId?: string; // the skill this question trains (a practice lesson mixes several skills)
   prompt: string;
   subPrompt?: string;
   formula?: string;
@@ -42,6 +43,7 @@ export interface Lesson {
   topic: string;
   currentQuestionIndex: number;
   questions: Question[];
+  isPractice?: boolean; // built from the child's mistakes instead of being one fixed skill
 }
 
 export interface DailyMission {

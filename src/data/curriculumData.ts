@@ -186,6 +186,7 @@ export function toLegacyQuestion(cq: CurriculumQuestion): Question {
 
   return {
     id: cq.id,
+    skillId: cq.skill,
     prompt: cq.question_content,
     formula: cq.formula,
     subPrompt: cq.subPrompt,

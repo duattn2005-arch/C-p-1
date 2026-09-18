@@ -14,7 +14,7 @@ import {
   Circle 
 } from 'lucide-react';
 import { storageService } from '../services/storage';
-import { findWeakestSkill } from '../services/mastery';
+import { analyzeLearning } from '../services/insights';
 import { skillsDatabase, getTopicById, getTopicsByGradeAndSubject } from '../data/curriculumData';
 import type { GradeLevel } from '../types/curriculum';
 
@@ -81,25 +81,53 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const vnPlan = planFor(vnSkills);
   const enPlan = planFor(enSkills);
 
-  const calcSubjectProgress = (skills: typeof gradeSkills, fallback: number) => {
-    if (skills.length === 0) return fallback;
-    const completed = skills.filter((s) => masteries[s.id] && masteries[s.id].mastery_score >= 50).length;
-    return completed > 0 ? Math.round((completed / skills.length) * 100) : fallback;
-  };
+  // Progress of a subject = the average mastery of its skills. It is 0% until the child really answers questions.
+  const subjectProgress = (skills: typeof gradeSkills) =>
+    skills.length === 0 ? 0 : Math.round(skills.reduce((sum, sk) => sum + Math.min(100, masteries[sk.id]?.mastery_score ?? 0), 0) / skills.length);
+  const mathProgress = subjectProgress(mathSkills);
+  const vnProgress = subjectProgress(vnSkills);
+  const enProgress = subjectProgress(enSkills);
 
-  const mathProgress = calcSubjectProgress(mathSkills, profile.mathMastery || 48);
-  const vnProgress = calcSubjectProgress(vnSkills, profile.vietnameseMastery || 45);
-  const enProgress = calcSubjectProgress(enSkills, profile.englishMastery || 60);
+  // What the AI knows about the child comes from the log of their answers, never from a default
+  const insights = analyzeLearning(storageService.getAttempts(), gradeSkills, masteries);
+  const topWeak = insights.weak[0];
+  const nextSkill = insights.next;
 
-  // Truly personalized AI recommendation for weakest skill
-  const realWeakestSkill = findWeakestSkill(masteries, gradeSkills);
-  const weakestScore = realWeakestSkill && masteries[realWeakestSkill.id] ? masteries[realWeakestSkill.id].mastery_score : (profile.mathMastery || 48);
-
-  const aiRec = {
-    skill: realWeakestSkill ? realWeakestSkill.name.toUpperCase() : (mathPlan.next?.name ?? 'TOÁN').toUpperCase(),
-    title: `AI đề xuất: Luyện 5 phút "${realWeakestSkill?.name ?? mathPlan.next?.name ?? 'Toán'}" để bứt phá điểm 10! ✨`,
-    mastery: weakestScore,
-  };
+  const aiRec = topWeak
+    ? {
+        badge: topWeak.skill.name.toUpperCase(),
+        title: `AI phát hiện con hay sai "${topWeak.skill.name}": đúng ${topWeak.recentAnswered - topWeak.recentErrors}/${topWeak.recentAnswered} câu gần đây. Luyện 5 phút để sửa nhé! ✨`,
+        mastery: topWeak.mastery,
+        note: topWeak.openMistakes > 0 ? `Còn ${topWeak.openMistakes} câu sai chưa sửa` : 'Con phải thử lại nhiều lần mới đúng',
+        button: 'Luyện 5 phút (+30 XP)',
+        practice: true,
+      }
+    : insights.level === 'none'
+    ? {
+        badge: 'CHƯA CÓ DỮ LIỆU',
+        title: 'Con chưa làm câu nào. Làm vài câu, AI sẽ chỉ ra phần con cần luyện thêm!',
+        mastery: null,
+        note: '',
+        button: 'Bắt đầu học',
+        practice: false,
+      }
+    : insights.level === 'few'
+    ? {
+        badge: 'AI ĐANG THEO DÕI',
+        title: `Con đã làm ${insights.answered} câu, đúng ${insights.correct} câu. Làm thêm vài câu để AI biết con yếu ở đâu nhé!`,
+        mastery: null,
+        note: '',
+        button: 'Học tiếp',
+        practice: false,
+      }
+    : {
+        badge: 'CHƯA THẤY PHẦN YẾU',
+        title: 'AI chưa thấy phần nào con yếu. Con học tiếp bài mới nhé! 🌟',
+        mastery: null,
+        note: '',
+        button: 'Học tiếp',
+        practice: false,
+      };
 
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col gap-7 pb-16">
@@ -130,8 +158,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     Mục tiêu: {profile.dailyGoalMinutes} phút
                   </span>
                   <span className="font-black text-[14px] text-[#2563EB]">
-                    {profile.studiedMinutesToday}/{profile.dailyGoalMinutes} phút (
-                    {Math.round((profile.studiedMinutesToday / profile.dailyGoalMinutes) * 100)}
+                    {insights.todayMinutes}/{profile.dailyGoalMinutes} phút (
+                    {Math.round((insights.todayMinutes / profile.dailyGoalMinutes) * 100)}
                     %)
                   </span>
                 </div>
@@ -140,7 +168,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div
                     className="h-full bg-gradient-to-r from-[#5BA7FF] to-[#2563EB] rounded-full transition-all duration-700"
                     style={{
-                      width: `${(profile.studiedMinutesToday / profile.dailyGoalMinutes) * 100}%`,
+                      width: `${Math.min(100, (insights.todayMinutes / profile.dailyGoalMinutes) * 100)}%`,
                     }}
                   />
                 </div>
@@ -333,7 +361,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div className="inline-flex items-center gap-2 self-start px-3 py-1 rounded-full bg-white border border-purple-200 shadow-xs">
                       <span className="text-[14px]">🎯</span>
                       <span className="font-black text-[#6D28D9] text-[12px] sm:text-[13px] tracking-tight">
-                        {aiRec.skill}
+                        {aiRec.badge}
                       </span>
                     </div>
                     <h3 className="font-black text-[20px] sm:text-[22px] text-purple-950 leading-tight">
@@ -342,7 +370,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </div>
 
-                {/* Mastery Bar */}
+                {/* Mastery Bar: only when there is a real weak skill to show */}
+                {aiRec.mastery !== null && (
                 <div className="bg-white/95 backdrop-blur-sm p-4 rounded-2xl border border-purple-100 shadow-xs">
                   <div className="flex items-center justify-between text-[15px] mb-2">
                     <div className="flex items-center gap-2">
@@ -365,20 +394,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     />
                   </div>
                   <div className="flex justify-between items-center mt-2 text-[12px] font-bold text-slate-400">
-                    <span>Đang tiến bộ đều đặn</span>
-                    <span className="text-[#6D28D9] font-extrabold">Mục tiêu tuần: 75%</span>
+                    <span>{aiRec.note}</span>
+                    <span className="text-[#6D28D9] font-extrabold">Dựa trên bài con đã làm</span>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Action Button */}
               <div className="w-full md:w-auto shrink-0 flex flex-col items-center">
                 <button
-                  onClick={onStartAiPractice}
+                  onClick={() => (aiRec.practice || !nextSkill ? onStartAiPractice() : onStartSubject(nextSkill.subject_id, nextSkill.id))}
                   className="w-full md:w-auto px-7 py-4 bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] hover:from-[#6D28D9] hover:to-[#5B21B6] text-white rounded-full font-black text-[16px] btn-tactile-purple transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-md"
                 >
                   <span className="text-[20px]">🤖</span>
-                  <span>Luyện 5 phút (+30 XP)</span>
+                  <span>{aiRec.button}</span>
                   <Zap className="w-4 h-4 fill-current text-yellow-300" />
                 </button>
               </div>
@@ -393,78 +423,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Thời gian học trong tuần
               </span>
               <span className="text-[12px] font-black text-[#1D4ED8] bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
-                Tổng: {profile.weeklyTotalMinutes} phút
+                Tổng: {insights.weekTotal} phút
               </span>
             </div>
 
             <div className="grid grid-cols-7 gap-2 pt-2 items-end h-24">
-              {/* T2 */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-blue-100 hover:bg-blue-200 transition-colors rounded-t-lg"
-                  style={{ height: '55%' }}
-                  title="T2: 15 phút"
-                />
-                <span className="text-[12px] font-bold text-slate-400">T2</span>
-              </div>
-              {/* T3 */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-blue-100 hover:bg-blue-200 transition-colors rounded-t-lg"
-                  style={{ height: '70%' }}
-                  title="T3: 20 phút"
-                />
-                <span className="text-[12px] font-bold text-slate-400">T3</span>
-              </div>
-              {/* T4 - Today */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-[#3B82F6] rounded-t-lg relative shadow-xs"
-                  style={{ height: '90%' }}
-                  title="Hôm nay: 25 phút"
-                >
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#24324A] text-white text-[9px] px-1.5 py-0.5 rounded font-black whitespace-nowrap shadow-sm">
-                    Hôm nay
+              {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((label, i) => {
+                const minutes = insights.weekMinutes[i];
+                const isToday = i === insights.todayIndex;
+                const top = Math.max(15, ...insights.weekMinutes);
+                const height = minutes > 0 ? Math.max(14, Math.round((minutes / top) * 100)) : 8;
+                return (
+                  <div key={label} className="flex flex-col items-center gap-1.5 h-full justify-end">
+                    <div
+                      className={`w-full max-w-[28px] rounded-t-lg relative ${isToday ? 'bg-[#3B82F6] shadow-xs' : minutes > 0 ? 'bg-blue-200 hover:bg-blue-300 transition-colors' : 'bg-slate-100'}`}
+                      style={{ height: `${height}%` }}
+                      title={minutes > 0 ? `${isToday ? 'Hôm nay' : label}: ${minutes} phút` : `${isToday ? 'Hôm nay' : label}: chưa học`}
+                    >
+                      {isToday && (
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#24324A] text-white text-[9px] px-1.5 py-0.5 rounded font-black whitespace-nowrap shadow-sm">
+                          Hôm nay
+                        </div>
+                      )}
+                    </div>
+                    <span className={`text-[12px] ${isToday ? 'font-black text-[#2563EB]' : 'font-bold text-slate-400'}`}>{label}</span>
                   </div>
-                </div>
-                <span className="text-[12px] font-black text-[#2563EB]">T4</span>
-              </div>
-              {/* T5 */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-slate-100 rounded-t-lg"
-                  style={{ height: '20%' }}
-                  title="T5: Chưa học"
-                />
-                <span className="text-[12px] font-bold text-slate-400">T5</span>
-              </div>
-              {/* T6 */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-slate-100 rounded-t-lg"
-                  style={{ height: '20%' }}
-                  title="T6: Chưa học"
-                />
-                <span className="text-[12px] font-bold text-slate-400">T6</span>
-              </div>
-              {/* T7 */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-slate-100 rounded-t-lg"
-                  style={{ height: '20%' }}
-                  title="T7: Chưa học"
-                />
-                <span className="text-[12px] font-bold text-slate-400">T7</span>
-              </div>
-              {/* CN */}
-              <div className="flex flex-col items-center gap-1.5 h-full justify-end">
-                <div
-                  className="w-full max-w-[28px] bg-slate-100 rounded-t-lg"
-                  style={{ height: '20%' }}
-                  title="CN: Chưa học"
-                />
-                <span className="text-[12px] font-bold text-slate-400">CN</span>
-              </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -582,16 +567,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     Rương kho báu tuần
                   </span>
                   <span className="text-[11px] font-black text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
-                    Cấp 2
+                    Cấp {profile.level}
                   </span>
                 </div>
                 <p className="text-[12px] font-bold text-amber-800/90 mt-0.5">
-                  Còn <strong className="text-amber-950 font-black">2 ngày streak</strong> để mở quà lớn!
+                  {insights.streakDays >= 7 ? (
+                    'Con đã học đủ 7 ngày liên tiếp: mở quà lớn nào!'
+                  ) : (
+                    <>
+                      Còn <strong className="text-amber-950 font-black">{7 - insights.streakDays} ngày</strong> học liên tiếp để mở quà lớn!
+                    </>
+                  )}
                 </p>
                 <div className="w-full h-2.5 bg-white/80 rounded-full overflow-hidden mt-2 p-0.5">
                   <div
                     className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full"
-                    style={{ width: '71%' }}
+                    style={{ width: `${Math.min(100, Math.round((insights.streakDays / 7) * 100))}%` }}
                   />
                 </div>
               </div>
@@ -610,7 +601,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Nhà Toán Học Nhí <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
                 </span>
                 <span className="text-[12px] font-bold text-slate-500">
-                  Cần thêm <strong className="text-purple-600 font-black">150 XP</strong> để mở khoá
+                  {profile.xp >= 500 ? (
+                    'Đã mở khoá'
+                  ) : (
+                    <>
+                      Cần thêm <strong className="text-purple-600 font-black">{500 - profile.xp} XP</strong> để mở khoá
+                    </>
+                  )}
                 </span>
               </div>
             </div>

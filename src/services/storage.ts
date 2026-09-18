@@ -8,6 +8,7 @@ import {
 } from '../types/curriculum';
 import { defaultMissions, initialStudentProfile } from '../data/mockData';
 import { createInitialMastery } from './mastery';
+import { activityStats } from './insights';
 
 const STORAGE_KEYS = {
   PROFILE: 'kiddo_student_profile',
@@ -17,7 +18,12 @@ const STORAGE_KEYS = {
   MISSIONS: 'kiddo_daily_missions',
   ONBOARDED: 'kiddo_onboarding_completed',
   AI_QUESTIONS: 'kiddo_ai_questions',
+  DATA_VERSION: 'kiddo_data_version',
 };
+
+// Bump when stored progress stops matching the content (old skill ids, sample numbers...)
+const DATA_VERSION = 2;
+const MAX_ATTEMPTS = 600;
 
 // Safe JSON get/set
 function getStoredItem<T>(key: string, defaultValue: T): T {
@@ -138,12 +144,26 @@ export const storageService = {
       id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString(),
     });
-    setStoredItem(STORAGE_KEYS.ATTEMPTS, attempts);
+    const kept = attempts.slice(-MAX_ATTEMPTS);
+    setStoredItem(STORAGE_KEYS.ATTEMPTS, kept);
+
+    // Streak, minutes studied and accuracy come from what the child really did, never from a counter
+    const activity = activityStats(kept);
+    this.saveProfile({
+      ...this.getProfile(),
+      streakDays: activity.streakDays,
+      studiedMinutesToday: activity.todayMinutes,
+      weeklyTotalMinutes: activity.weekTotal,
+      accuracyRate: activity.accuracy ?? 0,
+    });
+  },
+
+  getAttempts(): StudentAttempt[] {
+    return getStoredItem<StudentAttempt[]>(STORAGE_KEYS.ATTEMPTS, []);
   },
 
   getRecentMistakes(limit: number = 5): StudentAttempt[] {
-    const attempts = getStoredItem<StudentAttempt[]>(STORAGE_KEYS.ATTEMPTS, []);
-    return attempts.filter((a) => !a.is_correct).slice(-limit);
+    return this.getAttempts().filter((a) => !a.is_correct).slice(-limit);
   },
 
   // Daily Missions
@@ -166,3 +186,28 @@ export const storageService = {
     setStoredItem(STORAGE_KEYS.AI_QUESTIONS, list);
   },
 };
+
+// The questions were rewritten grade by grade, so progress saved against the old placeholder skills means nothing,
+// and the first version shipped made-up numbers (1,250 XP, 48% mastery, a 5-day streak). Start from the truth, once.
+function migrateStoredData(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (getStoredItem<number>(STORAGE_KEYS.DATA_VERSION, 1) >= DATA_VERSION) return;
+    const old = localStorage.getItem(STORAGE_KEYS.PROFILE);
+    for (const key of [STORAGE_KEYS.MASTERIES, STORAGE_KEYS.ATTEMPTS, STORAGE_KEYS.XP_TRANSACTIONS, STORAGE_KEYS.MISSIONS]) {
+      localStorage.removeItem(key);
+    }
+    if (old) {
+      const p = JSON.parse(old) as StudentProfile; // keep who the child is and which grade they chose
+      localStorage.setItem(
+        STORAGE_KEYS.PROFILE,
+        JSON.stringify({ ...initialStudentProfile, name: p.name || initialStudentProfile.name, grade: p.grade || initialStudentProfile.grade, dailyGoalMinutes: p.dailyGoalMinutes || initialStudentProfile.dailyGoalMinutes })
+      );
+    }
+    localStorage.setItem(STORAGE_KEYS.DATA_VERSION, JSON.stringify(DATA_VERSION));
+  } catch (e) {
+    console.error('Storage migration failed:', e);
+  }
+}
+
+migrateStoredData();

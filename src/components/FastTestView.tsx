@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lesson, Question, StudentProfile } from '../types';
 import { QuestionVisualView, OptionBody } from './QuestionVisual';
+import { describeAttempt } from '../services/attemptLog';
+import { updateSkillMasteryAfterAnswer } from '../services/mastery';
+import { storageService } from '../services/storage';
 import { KiddoMascot } from './KiddoMascot';
 import confetti from 'canvas-confetti';
 import { 
@@ -41,6 +44,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [isFinished, setIsFinished] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const shownAt = useRef<number>(Date.now());
 
   useEffect(() => {
     return () => {
@@ -89,6 +93,13 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
   const handleSelect = (optionId: string) => {
     stopSpeaking();
     setIsSpeaking(false);
+    const attempt = describeAttempt(currentQ, optionId, { fallbackSkillId: lesson.id, startedAt: shownAt.current, source: 'fast-test' });
+    storageService.recordAttempt(attempt);
+    const diff = { easy: 2, medium: 3, hard: 4 }[currentQ.difficulty] as 2 | 3 | 4;
+    storageService.saveSkillMastery(
+      updateSkillMasteryAfterAnswer(storageService.getSkillMastery(attempt.skill_id), attempt.is_correct, diff, attempt.is_correct ? 1 : -1)
+    );
+    shownAt.current = Date.now();
     const newAnswers = { ...answers, [currentIdx]: optionId };
     setAnswers(newAnswers);
 
@@ -119,7 +130,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
 
   const handleFinishAction = () => {
     if (isPassed) {
-      onPassFastTest(50, 92);
+      onPassFastTest(50, storageService.getSkillMastery(lesson.id).mastery_score);
     } else {
       onFailFastTest();
     }
@@ -267,7 +278,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
                     {correctCount}/{total} câu hỏi
                   </strong>
                   . Hệ thống ghi nhận độ thành thạo đạt{' '}
-                  <strong className="text-purple-600 font-black">92%</strong> và cho phép bỏ qua phần cơ bản!
+                  <strong className="text-purple-600 font-black">{storageService.getSkillMastery(lesson.id).mastery_score}%</strong> và cho phép bỏ qua phần cơ bản!
                 </p>
 
                 <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center gap-3 mb-6 w-full justify-center">
@@ -307,6 +318,7 @@ export const FastTestView: React.FC<FastTestViewProps> = ({
                   <button
                     onClick={() => {
                       setCurrentIdx(0);
+                      shownAt.current = Date.now();
                       setAnswers({});
                       setIsFinished(false);
                     }}

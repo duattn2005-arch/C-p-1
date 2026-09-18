@@ -120,6 +120,11 @@ export interface StudentAttempt {
   is_correct: boolean;
   time_spent_seconds: number;
   timestamp: string;
+  // What the child actually saw and chose, so the tutor can talk about the real mistake later
+  question_text?: string;
+  correct_answer?: string;
+  hint_stage?: number; // 0 = no help, 1-2 = hints, 3 = looked at the full solution
+  source?: 'lesson' | 'practice' | 'quick-check' | 'fast-test';
 }
 
 export interface PreTestResult {

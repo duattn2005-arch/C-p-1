@@ -47,6 +47,11 @@ export default function App() {
   // Active lesson state
   const [activeLesson, setActiveLesson] = useState<Lesson>(() => firstLessonFor(storageService.getProfile().grade, 'math'));
 
+  // Streak and minutes are worked out from the answers in storage: read them again whenever the screen changes
+  useEffect(() => {
+    setProfile(storageService.getProfile());
+  }, [viewMode]);
+
   // Show cheerful floating toast
   const showToast = (message: string) => {
     setToastNotification(message);
@@ -134,14 +139,9 @@ export default function App() {
   };
 
   // Fast Test Pass
-  const handlePassFastTest = (earnedXp: number, newMastery: number) => {
+  const handlePassFastTest = (earnedXp: number) => {
     storageService.addXP(earnedXp, 'Vượt cấp kiểm tra nhanh', 'fast-test');
-    const updated = storageService.getProfile();
-    setProfile({
-      ...updated,
-      mathMastery: newMastery,
-      studiedMinutesToday: Math.min(updated.dailyGoalMinutes, updated.studiedMinutesToday + 5),
-    });
+    setProfile(storageService.getProfile());
     showToast(`Chúc mừng con đã vượt cấp thành công! +${earnedXp} XP 🏆`);
     setViewMode('dashboard');
   };
@@ -155,11 +155,7 @@ export default function App() {
   // Lesson completed
   const handleCompleteLesson = (earnedXp: number) => {
     storageService.addXP(earnedXp, `Hoàn thành bài học: ${activeLesson.title}`, activeLesson.id);
-    const updated = storageService.getProfile();
-    setProfile({
-      ...updated,
-      studiedMinutesToday: Math.min(updated.dailyGoalMinutes, updated.studiedMinutesToday + 5),
-    });
+    setProfile(storageService.getProfile());
     showToast(`Xuất sắc! Hoàn thành bài học: +${earnedXp} XP 🎉`);
     setViewMode('dashboard');
   };
