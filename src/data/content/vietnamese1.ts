@@ -23,7 +23,7 @@ export const PIC_WORDS: ViWord[] = [
   W('bút', '✏️', 'sắc', 'b'), W('gấu', '🐻', 'sắc', 'g'), W('nấm', '🍄', 'sắc', 'n'), W('sóc', '🐿️', 'sắc', 's'),
   W('cỏ', '🌿', 'hỏi', 'c'), W('rổ', '🧺', 'hỏi', 'r'), W('khỉ', '🐒', 'hỏi'), W('nhện', '🕷️', 'nặng'),
   W('ngựa', '🐴', 'nặng'), W('mũ', '🧢', 'ngã', 'm'), W('chổi', '🧹', 'hỏi'), W('bánh', '🍰', 'sắc', 'b'),
-  W('nón', '👒', 'sắc', 'n'), W('trứng', '🥚', 'sắc'), W('tàu', '🚢', 'huyền', 't'), W('cờ', '🚩', 'huyền', 'c'),
+  W('trứng', '🥚', 'sắc'), W('tàu', '🚢', 'huyền', 't'), W('cờ', '🚩', 'huyền', 'c'),
   W('dứa', '🍍', 'sắc', 'd'), W('mây', '☁️', 'ngang', 'm'), W('nhà', '🏠', 'huyền'), W('ghế', '🪑', 'sắc'),
   W('bóng', '⚽', 'sắc', 'b'),
 ];

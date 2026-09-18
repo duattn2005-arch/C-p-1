@@ -106,7 +106,7 @@ const wordToPic: Maker = ({ r }) => {
 const GROUPS: { name: string; words: string[] }[] = [
   { name: 'con vật', words: ['mèo', 'chó', 'voi', 'rùa', 'hổ', 'thỏ', 'gấu', 'sóc', 'khỉ', 'ngựa'] },
   { name: 'quả', words: ['cam', 'táo', 'nho', 'dứa', 'lê', 'dừa'] },
-  { name: 'đồ vật', words: ['bút', 'mũ', 'đũa', 'rổ', 'chổi', 'bóng', 'nón', 'ghế', 'xe', 'cờ', 'tàu'] },
+  { name: 'đồ vật', words: ['bút', 'mũ', 'đũa', 'rổ', 'chổi', 'bóng', 'ghế', 'xe', 'cờ', 'tàu'] },
 ];
 
 const oddOne: Maker = ({ r }) => {
