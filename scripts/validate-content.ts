@@ -136,7 +136,7 @@ for (const topic of topicsDatabase) {
       if (/undefined|NaN|\[object/.test(JSON.stringify(q))) report(q, 'contains undefined/NaN');
       if (q.choices.some((c) => /^-/.test(c))) report(q, `negative choice: ${q.choices.join(' | ')}`);
 
-      const key = [q.question_content, q.formula ?? '', q.correct_answer, JSON.stringify(q.visual ?? null)].join('|');
+      const key = [q.question_content, q.formula ?? '', q.subPrompt ?? '', q.correct_answer, JSON.stringify(q.visual ?? null)].join('|');
       if (seenPrompts.has(key)) report(q, 'duplicate question inside skill');
       seenPrompts.add(key);
 
