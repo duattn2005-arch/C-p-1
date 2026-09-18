@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import { execSync } from 'child_process';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { calculateLongDivision } from '../src/utils/divisionHelper.js';
 
 const app = express();
@@ -23,6 +23,44 @@ function getGemini(): GoogleGenAI | null {
     }
   }
   return geminiClient;
+}
+
+// Models are tried in order: a retired (404) or overloaded (503) model falls through to the next one.
+// gemini-2.5-flash is no longer available to new API keys, so it must not be the default.
+const GEMINI_MODELS = (process.env.GEMINI_MODEL || 'gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite')
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+// Gemini 3 "thinks" by default (8-15s per reply); minimal thinking answers a tutoring question in ~4s.
+const MINIMAL_THINKING = { thinkingLevel: ThinkingLevel.MINIMAL };
+
+// A request, fallbacks included, must finish inside the 60s Vercel function limit (vercel.json).
+const GEMINI_BUDGET_MS = 50000;
+const GEMINI_ATTEMPT_TIMEOUT_MS = 30000;
+
+async function generateWithFallback(ai: GoogleGenAI, params: Omit<GenerateContentParameters, 'model'>) {
+  const deadline = Date.now() + GEMINI_BUDGET_MS;
+  let lastError: unknown = new Error('No Gemini model configured');
+  for (const model of GEMINI_MODELS) {
+    const remaining = deadline - Date.now();
+    if (remaining < 3000) break;
+    try {
+      return await ai.models.generateContent({
+        ...params,
+        model,
+        config: {
+          thinkingConfig: MINIMAL_THINKING,
+          ...params.config,
+          httpOptions: { timeout: Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, remaining) },
+        },
+      });
+    } catch (e: any) {
+      console.warn(`Gemini model ${model} failed (${e?.status ?? 'error'}), trying next:`, e?.message);
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 const SYSTEM_INSTRUCTION = `Bạn là Thầy giáo Kiddo AI - trợ lý học tập và gia sư thông minh, ân cần, kiên nhẫn dành riêng cho học sinh Tiểu học Việt Nam (Lớp 1 đến Lớp 5).
@@ -300,8 +338,7 @@ Yêu cầu nghiêm ngặt:
   ]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+      const response = await generateWithFallback(ai, {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           temperature: 0.3,
@@ -364,8 +401,7 @@ app.post('/api/ai/hint', async (req, res) => {
         prompt = `Học sinh Lớp ${studentGrade} muốn xem cách giải chi tiết câu hỏi: "${question}". Đáp án đúng là "${correctAnswer}". Hãy giải thích từng bước thật ân cần, ngắn gọn, dễ hiểu.`;
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+      const response = await generateWithFallback(ai, {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           systemInstruction: 'Bạn là gia sư Kiddo AI cho học sinh Tiểu học. Trả lời ngắn gọn, tích cực, truyền cảm hứng.',
@@ -431,8 +467,7 @@ app.post('/api/chat', async (req, res) => {
         parts: [{ text: message }],
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+      const response = await generateWithFallback(ai, {
         contents,
         config: {
           systemInstruction: contextualInstruction,
